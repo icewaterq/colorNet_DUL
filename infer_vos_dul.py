@@ -333,11 +333,18 @@ if __name__ == '__main__':
     #cfg.MODEL.ARCH='resnet18_attpooling'
     #cfg.MODEL.ARCH='resnet18_hg'
 
-    model = resnet18()
-    # model.fast_net.backbone.maxpool.stride = (1, 1)
+    model_pkl = torch.load(args.resume)
+    net_sd = model_pkl['model']
+    train_config = model_pkl['train_config']
+
+    print('create model.')
+    print('train_config')
+    print(train_config)
+
+    model = resnet18(is_thin = train_config['is_thin'],first_kernal_size = train_config['first_kernal_size'])
 
     labelprop = LabelPropVOS_CRW(cfg)
-    model.load_state_dict(torch.load(args.resume), strict=True)
+    model.load_state_dict(net_sd, strict=True)
 
     for p in model.parameters():
         p.requires_grad = False

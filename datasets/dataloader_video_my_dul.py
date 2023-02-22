@@ -300,12 +300,22 @@ def findEdge2(img,lenThresh,stride,scale = 1):
 
 class DataVideo(DLBase):
 
-    def __init__(self, cfg, split, val=False):
+    def __init__(self, cfg, split, val=False,is_aug = True,is_shadow = True,is_dul = True, is_liquid = True):
         super(DataVideo, self).__init__()
 
         self.cfg = cfg
         self.split = split
         self.val = val
+        self.is_aug = is_aug
+        self.is_shadow = is_shadow
+        self.is_dul = is_dul
+        self.is_liquid = is_liquid
+        print('init dataset.....')
+        print('is_aug',self.is_aug)
+        print('is_shadow', self.is_shadow)
+        print('is_dul', self.is_dul)
+        print('is_liquid', self.is_liquid)
+
 
         self.cfg_frame_gap = cfg.DATASET.VAL_FRAME_GAP if val else cfg.DATASET.FRAME_GAP
 
@@ -372,18 +382,16 @@ class DataVideo(DLBase):
         self._init_augm(cfg)
         self._init_augm_my(cfg)
 
-        self.color_jitter_l = transforms.Compose([
-            AddFakeShadow(0.6),
+        aug_lst_L = [
             transforms.RandomApply(
                 [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
                 p=0.8
             ),
             transforms.RandomGrayscale(p=0.2),
-            GaussianBlur(0.2),
-        ])
+            GaussianBlur(0.2)
+        ]
 
-        self.color_jitter_s = transforms.Compose([
-            AddFakeShadow(0.6),
+        aug_lst_S = [
             transforms.RandomApply(
                 [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
                 p=0.8
@@ -391,7 +399,16 @@ class DataVideo(DLBase):
             transforms.RandomGrayscale(p=0.2),
             GaussianBlur(0.3),
             Solarization(0.1),
-        ])
+        ]
+
+        if is_shadow:
+            print('add shadow aug.')
+            aug_lst_L.insert(0, AddFakeShadow(0.6))
+            aug_lst_S.insert(0, AddFakeShadow(0.6))
+
+        self.color_jitter_l = transforms.Compose(aug_lst_L)
+        self.color_jitter_s = transforms.Compose(aug_lst_S)
+
         self.random_mask = transforms.Compose([
             AddRandomMask(0.5)
         ])
@@ -561,7 +578,9 @@ class DataVideo(DLBase):
 
     def __getitem__(self, index):
         isTrans = True
-        if random.random()<0.5:
+        if random.random() < 0.5:
+            isTrans = False
+        if not self.is_liquid:
             isTrans = False
 
         # searching for the video clip ID
@@ -640,11 +659,15 @@ class DataVideo(DLBase):
 
         w_mask_lst = []
         for i in range(self.cfg.DATASET.VIDEO_LEN):
-            if isTrans:
-                frames1[i] = self.color_jitter_s(frames2[i])
+            if self.is_aug:
+                if isTrans:
+                    frames1[i] = self.color_jitter_s(frames2[i])
+                else:
+                    frames1[i] = self.color_jitter_s(frames1[i])
+                frames2[i] = self.color_jitter_l(frames2[i])
             else:
-                frames1[i] = self.color_jitter_s(frames1[i])
-            frames2[i] = self.color_jitter_l(frames2[i])
+                if isTrans:
+                    frames1[i] = frames2[i].copy()
             w_mask = findEdge2(np.asarray(frames2[i]), 16, 16, scale=0.5)
             w_mask_lst.append(w_mask)
 
@@ -670,7 +693,7 @@ class DataVideo(DLBase):
         frames1 = torch.stack(frames1, 0)
         frames2 = torch.stack(frames2, 0)
 
-        aff_main = F.affine_grid(aff_main, size=(frames1.size(0),self.cfg.MODEL.FEATURE_DIM+1000,frames1.size(2)//8,frames1.size(3)//8), align_corners=False)
+        aff_main = F.affine_grid(aff_main, size=(frames1.size(0),self.cfg.MODEL.FEATURE_DIM,frames1.size(2)//8,frames1.size(3)//8), align_corners=False)
         aff_reg = F.affine_grid(aff_reg, size=(frames1.size(0),self.cfg.MODEL.FEATURE_DIM,frames1.size(2)//8,frames1.size(3)//8), align_corners=False)
         if isTrans:
             # print('aff_main',aff_main.size())
@@ -694,29 +717,51 @@ class DataVideo(DLBase):
         # ===================================my=================================
 
         # ===================================dul=================================
-        frames_dul, valid_dul = self.tf_pre(images_dul)
+        if self.is_dul:
+            frames_dul, valid_dul = self.tf_pre(images_dul)
 
-        frames1_dul, valid1_dul = frames_dul[:], valid_dul[:]
-        frames2_dul = [f.copy() for f in frames_dul]
-        valid2_dul = [v.copy() for v in valid_dul]
+            frames1_dul, valid1_dul = frames_dul[:], valid_dul[:]
+            frames2_dul = [f.copy() for f in frames_dul]
+            valid2_dul = [v.copy() for v in valid_dul]
 
-        frames1_dul, valid1_dul, affine_params1_dul = self.tf_affine(frames1_dul, valid1_dul)
-        frames2_dul, valid2_dul, affine_params2_dul = self.tf_affine2(frames2_dul, valid2_dul)
+            frames1_dul, valid1_dul, affine_params1_dul = self.tf_affine(frames1_dul, valid1_dul)
+            frames2_dul, valid2_dul, affine_params2_dul = self.tf_affine2(frames2_dul, valid2_dul)
 
 
-        frames1_dul = self.tf_post(frames1_dul, valid1_dul)
-        frames2_dul = self.tf_post(frames2_dul, valid2_dul)
+            frames1_dul = self.tf_post(frames1_dul, valid1_dul)
+            frames2_dul = self.tf_post(frames2_dul, valid2_dul)
 
-        aff_reg_dul = self._get_affine(affine_params1_dul)
-        aff_main_dul = self._get_affine(affine_params2_dul)
+            aff_reg_dul = self._get_affine(affine_params1_dul)
+            aff_main_dul = self._get_affine(affine_params2_dul)
 
-        aff_reg_inv_dul = self._get_affine_inv(aff_reg_dul, affine_params1_dul)
-        aff_reg_dul = aff_main_dul
-        aff_main_dul = aff_reg_inv_dul
+            aff_reg_inv_dul = self._get_affine_inv(aff_reg_dul, affine_params1_dul)
+            aff_reg_dul = aff_main_dul
+            aff_main_dul = aff_reg_inv_dul
 
-        frames1_dul = torch.stack(frames1_dul, 0)
-        frames2_dul = torch.stack(frames2_dul, 0)
+            frames1_dul = torch.stack(frames1_dul, 0)
+            frames2_dul = torch.stack(frames2_dul, 0)
+            return frames2, frames1, aff_main, aff_reg, labs2, labs1, rgbs2, rgbs1, w_mask_lst, frames2_dul, frames1_dul, aff_main_dul, aff_reg_dul
+            # ===================================dul=================================
+        else:
+            return frames2, frames1, aff_main, aff_reg, labs2, labs1, rgbs2, rgbs1, w_mask_lst
 
-        # ===================================dul=================================
 
-        return frames2, frames1, aff_main, aff_reg, labs2, labs1, rgbs2, rgbs1, w_mask_lst, frames2_dul, frames1_dul, aff_main_dul, aff_reg_dul
+
+if __name__=='__main__':
+    aug_lst_S = [
+        transforms.RandomApply(
+            [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+            p=0.8
+        ),
+        transforms.RandomGrayscale(p=0.2),
+        GaussianBlur(0.3),
+        Solarization(1.9),
+    ]
+    aug_lst_S.insert(0, AddFakeShadow(0.6))
+
+    color_jitter_s = transforms.Compose(aug_lst_S)
+    img = Image.open(r'D:\temp\line12crop.jpg')
+    # img2 = color_jitter_s(img)
+    img2 = img.copy()
+    img.show()
+    img2.show()

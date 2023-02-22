@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import json
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
@@ -25,8 +26,6 @@ from models.resnet_my import resnet18
 import matplotlib.pyplot as plt
 import argparse
 
-# src->crop涔嬮棿鐨勭洃鐫ｄ俊鍙蜂篃鐢ㄩ鑹?# helpers
-
 width = 256
 height = 256
 stride = 8
@@ -49,7 +48,7 @@ def l1_norm(input, axis=1):
 
 
 class ViT(nn.Module):
-    def __init__(self, cfg, ohem_range=[0.4, 1.0], is_thin=False, return_query = True):
+    def __init__(self, cfg, ohem_range=[0.4, 1.0], is_thin=False, return_query = True, is_dul = False, is_neg = True):
         super().__init__()
 
         self.cls_num = 16
@@ -60,6 +59,13 @@ class ViT(nn.Module):
         self.convlocal = resnet18(is_thin=is_thin)
         self.eye = None
         self.return_query = return_query
+        self.is_dul = is_dul
+        self.is_neg = is_neg
+
+        print('.....init network.')
+        print('self.return_query',self.return_query)
+        print('self.is_dul', self.is_dul)
+        print('self.is_neg', self.is_neg)
 
     def _align_my(self, x, tf):
         return F.grid_sample(x, tf, align_corners=False, mode="nearest", padding_mode='reflection')
@@ -281,8 +287,8 @@ class ViT(nn.Module):
     #
     #     return error_ref.mean(), error_t.mean(), error_map
 
-    def forward(self, frames1, frames2, affines, affine_src, labLst, w_mask_lst, rgbs1, rgbs2, frames1_d, frames2_d,
-                affines_d, affine_src_d):
+    def forward(self, frames1, frames2, affines, affine_src, labLst, w_mask_lst, frames1_d = None, frames2_d = None,
+                affines_d = None, affine_src_d = None):
         result = {}
         result['feat1'] = None
         result['feat2'] = None
@@ -301,38 +307,43 @@ class ViT(nn.Module):
         affine_src = affine_src.flatten(0, 1).cuda()
 
         # ==========================DUL================================
+        if self.is_dul \
+                and not frames1_d is None \
+                and not frames2_d is None \
+                and not affines_d is None \
+                and not affine_src_d is None:
+            images1_d = torch.cat((frames1_d, frames2_d[:, ::T]), 1)
+            images1_d = images1_d.flatten(0, 1).cuda()
+            images2_d = frames2_d[:, 1:].flatten(0, 1).cuda()
 
-        images1_d = torch.cat((frames1_d, frames2_d[:, ::T]), 1)
-        images1_d = images1_d.flatten(0, 1).cuda()
-        images2_d = frames2_d[:, 1:].flatten(0, 1).cuda()
+            affines_d = affines_d.flatten(0, 1).cuda()
+            affine_src_d = affine_src_d.flatten(0, 1).cuda()
 
-        affines_d = affines_d.flatten(0, 1).cuda()
-        affine_src_d = affine_src_d.flatten(0, 1).cuda()
-
-        if self.return_query:
-            _, key1_cls, _, _ = self.convlocal(images1_d)
-        else:
-            _, _, _, key1_cls = self.convlocal(images1_d)
-        _, C, H, W = key1_cls.size()
-
-        with torch.no_grad():
             if self.return_query:
-                _, key2_cls, _, _ = self.convlocal(images2_d)
+                _, key1_cls, _, _ = self.convlocal(images1_d)
             else:
-                _, _, _, key2_cls = self.convlocal(images2_d)
+                _, _, _, key1_cls = self.convlocal(images1_d)
+            _, C, H, W = key1_cls.size()
 
-        key1_cls, key2_cls = self.fetch_first(key1_cls, key2_cls, T)
+            with torch.no_grad():
+                if self.return_query:
+                    _, key2_cls, _, _ = self.convlocal(images2_d)
+                else:
+                    _, _, _, key2_cls = self.convlocal(images2_d)
 
-        vals, pseudo, index = self._cluster_grid(key1_cls, key2_cls, affines_d, affine_src_d, T)
+            key1_cls, key2_cls = self.fetch_first(key1_cls, key2_cls, T)
 
-        key1_aligned = self._align(key1_cls, affines_d)
-        key2_aligned = self._align(key2_cls, affine_src_d)
+            vals, pseudo, index = self._cluster_grid(key1_cls, key2_cls, affines_d, affine_src_d, T)
 
-        n_ref = self.cfg.MODEL.GRID_SIZE_REF  # N = 4
-        loss_cross_key = self._ref_loss(key1_aligned[::T], key2_aligned[::T], N=n_ref)
-        loss_temp = self._ce_loss(vals, pseudo, T)
-        loss_dul = 0.1 * loss_cross_key + loss_temp
-        result['loss_dul'] = loss_dul
+            key1_aligned = self._align(key1_cls, affines_d)
+            key2_aligned = self._align(key2_cls, affine_src_d)
+
+            n_ref = self.cfg.MODEL.GRID_SIZE_REF  # N = 4
+            loss_cross_key = self._ref_loss(key1_aligned[::T], key2_aligned[::T], N=n_ref)
+            loss_temp = self._ce_loss(vals, pseudo, T)
+            loss_dul = 0.1 * loss_cross_key + loss_temp
+            result['loss_dul'] = loss_dul
+
         # =============================================================
         if self.return_query:
             key1, _, _, _ = self.convlocal(img1)
@@ -459,6 +470,31 @@ def init_random_seed(seed):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def load_trai_config(path):
+    train_config = {
+        'exp':'benchmark',
+        'first_kernal_size':3,
+        'color_mode':'LAB',
+        'is_dul':True,
+        'is_aug':True,
+        'is_shadow':True,
+        'is_liquid':True,
+        'is_edge':True,
+        'is_neg':True,
+        'ohem_range':[0,1.0],
+        'is_thin':True,
+        'TEMP':25,
+        'is_cos_lr':True
+    }
+    if not os.path.exists(path):
+        return train_config
+    with open(path) as fp:
+        jsonobj = json.load(fp)
+    for key in train_config:
+        if key in jsonobj:
+            train_config[key] = jsonobj[key]
+    return train_config
+
 
 if __name__ == '__main__':
     init_random_seed(777)
@@ -468,141 +504,142 @@ if __name__ == '__main__':
     cfg.DATASET.RND_ZOOM_RANGE = [0.5, 1.]
 
     parser = argparse.ArgumentParser('')
-    parser.add_argument('--is_ohem', action='store_true')
-    parser.add_argument('--is_thin', action='store_true')
-
+    parser.add_argument('--exp', default='benchmark', type=str, help="实验信息")
+    parser.add_argument('--train_config', default='./configs/train_config_default.json', type=str, help="训练配置文件")
     args = parser.parse_args()
-    is_w_mask = True
-    is_cos_lr = True
-    is_coco = False
-    is_ohem = args.is_ohem
-    is_thin = args.is_thin
-    if is_ohem:
-        ohem_range = [0.4, 1.0]
-    else:
-        ohem_range = [0.0, 1.0]
-    print('is_w_mask', is_w_mask)
-    print('is_cos_lr', is_cos_lr)
-    print('is_coco', is_coco)
-    print('ohem_range', ohem_range)
-    print('is_thin', is_thin)
 
-    dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos',is_dul=False)
-    dataloader = data.DataLoader(dataset, batch_size=2, \
-                                 shuffle=True)
+    expid = args.exp
+    train_config_path = args.train_config
+    train_config = load_trai_config(train_config_path)
 
-    for i, batch in enumerate(dataloader):
-        # frames1, frames2, affine1,_,labs1, labs2 = batch
-        # frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
-        frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst = batch
-        assert frames1.size() == frames2.size(), "Frames shape mismatch"
-        frames1, frames2, affine1 = frames1, frames2, affine1
-        # We could simply do
-        #   images1 = frames1.flatten(0,1).cuda()
-        #   images2 = frames2.flatten(0,1).cuda()
-        # Instead we pull the reference frame from the 2nd view
-        # to the first view so that the regularising branch is
-        # always in evaluation mode to save the GPU memory
-        print(frames1.size(), affine1.size())
-        # print('affine_src',affine_src[0])
-        # print('affine_src_d',affine_src_d[0])
-        for i in range(5):
-            print('affine1[0]', affine1.size())
-            img3 = F.grid_sample(frames1[0], affine1[0], align_corners=False, mode="bilinear",padding_mode='reflection')
+    print('run exp',expid)
+    print('load train config:',train_config_path)
+    for key in train_config:
+        print('{} : {}'.format(key,train_config[key]))
 
-            # tf = F.affine_grid(affine1[0], size=frames1[0].size(), align_corners=False)
-            # img3 = F.grid_sample(frames1[0], tf, align_corners=False, mode="bilinear")
+    exp = train_config['exp']
+    first_kernal_size = train_config['first_kernal_size']
+    color_mode = train_config['color_mode']
+    is_dul = train_config['is_dul']
+    is_aug = train_config['is_aug']
+    is_shadow = train_config['is_shadow']
+    is_liquid = train_config['is_liquid']
+    is_edge = train_config['is_edge']
+    is_neg = train_config['is_neg']
+    ohem_range = train_config['ohem_range']
+    is_thin = train_config['is_thin']
+    TEMP = train_config['TEMP']
+    is_cos_lr = train_config['is_cos_lr']
 
-            img1 = frames1[0, i, :].permute(1, 2, 0).numpy()
-            img2 = frames2[0, i, :].permute(1, 2, 0).numpy()
-            img3 = img3[i, :].permute(1, 2, 0).numpy()
-            mean_ = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
-            std_ = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
 
-            img1 = np.array((img1 * std_ + mean_) * 255, dtype=np.uint8)
-            img2 = np.array((img2 * std_ + mean_) * 255, dtype=np.uint8)
-            img3 = np.array((img3 * std_ + mean_) * 255, dtype=np.uint8)
-            # img3 = cv2.resize(img3, (0, 0), fx=8, fy=8)
-            img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2BGR)
-            img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
-            img3 = cv2.cvtColor(img3, cv2.COLOR_RGB2BGR)
-            # img1[..., 0] = 255
-            # img2[..., 0] = 255
-            # img2[..., 1] = img2[..., 0]
-            # img2[..., 2] = img2[..., 0]
-            # img3[..., 0] = 255
-            print(img1.shape)
-            cv2.imshow('img1', img1)
-            cv2.imshow('img2', img2)
-            cv2.imshow('img3', img3)
-            plt.show()
-            cv2.waitKey()
 
-    net = ViT(cfg, ohem_range=ohem_range, is_thin=is_thin, return_query=False).cuda()
+    # dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
+    # dataloader = data.DataLoader(dataset, batch_size=2, \
+    #                              shuffle=True)
+    #
+    # for i, batch in enumerate(dataloader):
+    #     # frames1, frames2, affine1,_,labs1, labs2 = batch
+    #     frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+    #     assert frames1.size() == frames2.size(), "Frames shape mismatch"
+    #     frames1, frames2, affine1 = frames1_d, frames2_d, affine1_d
+    #     # We could simply do
+    #     #   images1 = frames1.flatten(0,1).cuda()
+    #     #   images2 = frames2.flatten(0,1).cuda()
+    #     # Instead we pull the reference frame from the 2nd view
+    #     # to the first view so that the regularising branch is
+    #     # always in evaluation mode to save the GPU memory
+    #     print(frames1.size(), affine1.size())
+    #     # print('affine_src',affine_src[0])
+    #     # print('affine_src_d',affine_src_d[0])
+    #     for i in range(5):
+    #         print('affine1[0]', affine1.size())
+    #         # img3 = F.grid_sample(frames1[0], affine1[0], align_corners=False, mode="bilinear",padding_mode='reflection')
+    #
+    #         tf = F.affine_grid(affine1[0], size=frames1[0].size(), align_corners=False)
+    #         img3 = F.grid_sample(frames1[0], tf, align_corners=False, mode="bilinear")
+    #
+    #         img1 = frames1[0, i, :].permute(1, 2, 0).numpy()
+    #         img2 = frames2[0, i, :].permute(1, 2, 0).numpy()
+    #         img3 = img3[i, :].permute(1, 2, 0).numpy()
+    #         mean_ = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+    #         std_ = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
+    #
+    #         img1 = np.array((img1 * std_ + mean_) * 255, dtype=np.uint8)
+    #         img2 = np.array((img2 * std_ + mean_) * 255, dtype=np.uint8)
+    #         img3 = np.array((img3 * std_ + mean_) * 255, dtype=np.uint8)
+    #         # img3 = cv2.resize(img3, (0, 0), fx=8, fy=8)
+    #         img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2BGR)
+    #         img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
+    #         img3 = cv2.cvtColor(img3, cv2.COLOR_RGB2BGR)
+    #         # img1[..., 0] = 255
+    #         # img2[..., 0] = 255
+    #         # img2[..., 1] = img2[..., 0]
+    #         # img2[..., 2] = img2[..., 0]
+    #         # img3[..., 0] = 255
+    #         print(img1.shape)
+    #         cv2.imshow('img1', img1)
+    #         cv2.imshow('img2', img2)
+    #         cv2.imshow('img3', img3)
+    #         plt.show()
+    #         cv2.waitKey()
+
+    net = ViT(cfg, ohem_range=ohem_range, is_thin=is_thin,is_dul=is_dul,is_neg = is_neg).cuda()
     net.cuda()
     print(net)
 
-    # x1 = torch.rand(2, rCount, 3, height, width).cuda()
-    # x2 = torch.rand(2, rCount, 3, height, width).cuda()
-    # x3 = torch.rand(2, rCount, height//8, width//8, 2).cuda()
-    # x4 = torch.rand(2, rCount, 3, height, width).cuda()
-    # x5 = torch.rand(2, rCount, 3, height, width).cuda()
-    # result = net(x1, x2, x3, x4, x5)
-    # feat1 = result['feat1']
-    # feat2 = result['feat2']
-    #
-    # print(feat1.size())
-    # print(feat2.size())
-
     optimzer = optimzer.AdamW(net.parameters(), lr=0.0001, eps=1e-8, betas=[0.9, 0.95])
-    if is_coco:
-        dataset = dataloader_video_my_coco.DataVideo(cfg, 'train_ytvos')
-    else:
-        dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
+    dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos',is_aug=is_aug,is_shadow=is_shadow,is_dul=is_dul,is_liquid=is_liquid)
     dataloader = data.DataLoader(dataset, batch_size=8, shuffle=True, num_workers=12, drop_last=True)
     color_lst = torch.randint(0, 255, (net.cls_num, 3)).cuda()
 
-    for epoch in range(1, 301):
+    for epoch in range(0, 301):
         if is_cos_lr:
             adjust_learning_rate_cos(optimzer, epoch)
         else:
             adjust_learning_rate(optimzer, epoch)
 
         for i, batch in enumerate(dataloader):
-            frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+            if is_dul:
+                frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+                frames1_d = frames1_d.cuda().float()
+                frames2_d = frames2_d.cuda().float()
+                affine1_d = affine1_d.cuda().float()
+                affine_src_d = affine_src_d.cuda().float()
+            else:
+                frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst = batch
+
             frames1 = frames1.cuda().float()
             frames2 = frames2.cuda().float()
-            rgbs1 = rgbs1.cuda().float()
-            rgbs2 = rgbs2.cuda().float()
             affine1 = affine1.cuda().float()
-            labs1 = labs1.cuda().float()
-            labs2 = labs2.cuda().float()
-
-            frames1_d = frames1_d.cuda().float()
-            frames2_d = frames2_d.cuda().float()
-            affine1_d = affine1_d.cuda().float()
-            affine_src_d = affine_src_d.cuda().float()
-
             w_mask_lst = w_mask_lst.cuda().float()
-            if not is_w_mask:
+            if color_mode == 'LAB':
+                labs1 = labs1.cuda().float()
+                labs2 = labs2.cuda().float()
+            else:
+                labs1 = rgbs1.cuda().float()
+                labs2 = rgbs2.cuda().float()
+
+            if not is_edge:
                 w_mask_lst = w_mask_lst * 0 + 1
             optimzer.zero_grad()
-            if True:
-                pred_result = net(frames1, frames2, affine1, affine_src, labs1, w_mask_lst, rgbs1, rgbs2, frames1_d,
-                                  frames2_d, affine1_d, affine_src_d)
-                feat1 = pred_result['feat1']
-                feat2 = pred_result['feat2']
-                loss_dul = pred_result['loss_dul']
 
-                loss_ce = pred_result['loss_ce']
-                loss_color = pred_result['loss_color']
-                color_lst = pred_result['color_lst']
-                loss_colorF = pred_result['loss_colorF']
-                color_lstF = pred_result['color_lstF']
-                neg_loss = pred_result['neg_loss']
+            if is_dul:
+                pred_result = net(frames1, frames2, affine1, affine_src, labs1, w_mask_lst,
+                                  frames1_d,frames2_d, affine1_d, affine_src_d)
+            else:
+                pred_result = net(frames1, frames2, affine1, affine_src, labs1, w_mask_lst)
+
+            loss_dul = pred_result['loss_dul']
+            loss_ce = pred_result['loss_ce']
+            loss_color = pred_result['loss_color']
+            color_lst = pred_result['color_lst']
+            loss_colorF = pred_result['loss_colorF']
+            color_lstF = pred_result['color_lstF']
+            neg_loss = pred_result['neg_loss']
+            if is_dul:
                 loss = loss_ce + loss_color + loss_colorF + loss_dul * 0.1
-                # loss = loss_dul
-                # loss = loss_ce + loss_color + loss_colorF
+            else:
+                loss = loss_ce + loss_color + loss_colorF
 
             loss.backward()
             optimzer.step()
@@ -645,11 +682,12 @@ if __name__ == '__main__':
                     cv2.imwrite('./images/COCO_imgF{}_pred.jpg'.format(idx), color1F)
 
         if epoch % 20 == 0:
-            if is_thin:
-                torch.save(net.convlocal.state_dict(),
-                           './snapshots/DULs8_512_My01_thin_{}.pkl'.format(epoch))
-            else:
-                torch.save(net.convlocal.state_dict(),
-                           './snapshots/DULs8_512_My01_{}.pkl'.format(epoch))
+            net_sd = net.convlocal.state_dict()
+            save_dict = {
+                'model': net_sd,
+                'train_config': train_config
+            }
+            torch.save(save_dict,
+                           './snapshots/{}_{:0>3d}.pkl'.format(expid,epoch))
 
 

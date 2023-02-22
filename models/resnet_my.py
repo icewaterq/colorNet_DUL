@@ -138,7 +138,8 @@ class ResNet(nn.Module):
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         num_classes: int = 1000,
-        is_thin = False,
+        is_thin = False,        #是否创建更少通道的网络
+        first_kernal_size = 3,  #第一个卷积的卷积核大小
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
@@ -163,7 +164,7 @@ class ResNet(nn.Module):
             )
         self.groups = groups
         self.base_width = width_per_group
-        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=first_kernal_size, stride=2, padding=(first_kernal_size - 1) // 2, bias=False)
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -326,7 +327,7 @@ def resnet18(*, progress: bool = True, **kwargs: Any) -> ResNet:
 
 
 if __name__ == '__main__':
-    net = resnet18(is_thin = True)
+    net = resnet18(is_thin = True,first_kernal_size = 3)
     print(net)
     x = torch.rand(2,3,256,256)
     color,cls,_,_ = net(x)

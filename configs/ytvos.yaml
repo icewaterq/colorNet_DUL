@@ -1,6 +1,7 @@
 DATASET:
-  ROOT: r"/cpfs01/user/aiforscience2/kjq/dataset/vos/train"
+#  ROOT: r"/cpfs01/user/aiforscience2/kjq/dataset/vos/train"
 #  ROOT: r"D:\BaiduNetdiskDownload\vos\all_frames\train_all_frames_zip\train_all_frames\train_all_frames"
+  ROOT: r"/root/autodl-tmp/dataset/vos/train"
   SMALLEST_RANGE: [256, 320]
   RND_CROP: True
   RND_ZOOM: True
