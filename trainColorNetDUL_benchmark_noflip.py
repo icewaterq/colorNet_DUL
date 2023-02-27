@@ -30,7 +30,6 @@ width = 256
 height = 256
 stride = 8
 patch_dim = stride * stride
-rCount = 5
 TEMP = 25
 
 
@@ -296,8 +295,6 @@ class ViT(nn.Module):
         result['neg_loss'] = frames1.new_zeros(1)
         result['color_lst'] = None
         result['loss_color'] = frames1.new_zeros(1)
-        result['color_lstF'] = None
-        result['loss_colorF'] = frames1.new_zeros(1)
         result['loss_dul'] = frames1.new_zeros(1)
 
         B, T, _, _, _ = frames1.size()
@@ -371,14 +368,12 @@ class ViT(nn.Module):
         color_loss_lst = []
         color_pred_lst = []
 
-        color_loss_lstF = []
-        color_pred_lstF = []
         HW = H * W
         if self.is_neg:
-            for i in range(rCount):
+            for i in range(self.cfg.DATASET.VIDEO_LEN):
                 featp1 = torch.cat([key1[:, i], torch.flip(key1[:, i], [0])], 1)  # key : B,2HW,C
                 lab1 = torch.cat([labLst[:, i], torch.flip(labLst[:, i], [0])], 1)  # key : B,2HW,C
-                for j in range(rCount):
+                for j in range(self.cfg.DATASET.VIDEO_LEN):
                     if i == j:
                         continue
                     featp2 = torch.cat([key1[:, j], torch.flip(key1[:, j], [0])], 1)
@@ -392,26 +387,17 @@ class ViT(nn.Module):
                         loss_color_part = F.smooth_l1_loss(color1[bid] * mask[bid], gt1[bid] * mask[bid], beta=0.5)
                         color_loss_lst.append(loss_color_part)
 
-                    att2 = torch.bmm(featp1[:, :HW], featp2.permute(0, 2, 1)) * TEMP
-                    att2 = F.softmax(att2, dim=2)
-                    color2 = torch.bmm(att2, torch.cat([color1, torch.flip(color1, [0])], 1))
-                    for bid in range(B):
-                        loss_color_part = F.smooth_l1_loss(color2[bid], lab1[bid][:HW], beta=0.5)
-                        color_loss_lstF.append(loss_color_part)
 
                     if i == 0:
                         color1 = color1.view(-1, int(height // stride), int(width // stride),
                                              stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
                         color_pred_lst.append(color1)
 
-                        color2 = color2.view(-1, int(height // stride), int(width // stride),
-                                             stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
-                        color_pred_lstF.append(color2)
         else:
-            for i in range(rCount):
+            for i in range(self.cfg.DATASET.VIDEO_LEN):
                 featp1 = key1[:, i]  # key : B,HW,C
                 lab1 = labLst[:, i]  # key : B,HW,C
-                for j in range(rCount):
+                for j in range(self.cfg.DATASET.VIDEO_LEN):
                     if i == j:
                         continue
                     featp2 = key1[:, j]
@@ -425,21 +411,11 @@ class ViT(nn.Module):
                         loss_color_part = F.smooth_l1_loss(color1[bid] * mask[bid], gt1[bid] * mask[bid], beta=0.5)
                         color_loss_lst.append(loss_color_part)
 
-                    att2 = torch.bmm(featp1, featp2.permute(0, 2, 1)) * TEMP
-                    att2 = F.softmax(att2, dim=2)
-                    color2 = torch.bmm(att2, color1)
-                    for bid in range(B):
-                        loss_color_part = F.smooth_l1_loss(color2[bid], lab1[bid], beta=0.5)
-                        color_loss_lstF.append(loss_color_part)
-
                     if i == 0:
                         color1 = color1.view(-1, int(height // stride), int(width // stride),
                                              stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
                         color_pred_lst.append(color1)
 
-                        color2 = color2.view(-1, int(height // stride), int(width // stride),
-                                             stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
-                        color_pred_lstF.append(color2)
 
         color_loss_lst.sort()
         loss_color = 0
@@ -448,14 +424,6 @@ class ViT(nn.Module):
         for i in range(idx1, idx2):
             loss_color += color_loss_lst[i]
         loss_color /= (idx2 - idx1)
-
-        color_loss_lstF.sort()
-        loss_colorF = 0
-        idx1 = int(len(color_loss_lstF) * self.ohem_range[0])
-        idx2 = int(len(color_loss_lstF) * self.ohem_range[1])
-        for i in range(idx1, idx2):
-            loss_colorF += color_loss_lstF[i]
-        loss_colorF /= (idx2 - idx1)
 
         neg_loss = self._neg_loss(key1[:, 0])
 
@@ -466,9 +434,6 @@ class ViT(nn.Module):
 
         result['color_lst'] = color_pred_lst
         result['loss_color'] = loss_color
-
-        result['color_lstF'] = color_pred_lstF
-        result['loss_colorF'] = loss_colorF
 
         return result
 
@@ -570,57 +535,57 @@ if __name__ == '__main__':
 
 
 
-    dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
-    dataloader = data.DataLoader(dataset, batch_size=2, \
-                                 shuffle=True)
-
-    for i, batch in enumerate(dataloader):
-        # frames1, frames2, affine1,_,labs1, labs2 = batch
-        frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
-        for tt in batch:
-            print(tt.size())
-        assert frames1.size() == frames2.size(), "Frames shape mismatch"
-        frames1, frames2, affine1 = frames1_d, frames2_d, affine1_d
-        # We could simply do
-        #   images1 = frames1.flatten(0,1).cuda()
-        #   images2 = frames2.flatten(0,1).cuda()
-        # Instead we pull the reference frame from the 2nd view
-        # to the first view so that the regularising branch is
-        # always in evaluation mode to save the GPU memory
-        print(frames1.size(), affine1.size())
-        # print('affine_src',affine_src[0])
-        # print('affine_src_d',affine_src_d[0])
-        for i in range(cfg.DATASET.VIDEO_LEN):
-            print('affine1[0]', affine1.size())
-            # img3 = F.grid_sample(frames1[0], affine1[0], align_corners=False, mode="bilinear",padding_mode='reflection')
-
-            tf = F.affine_grid(affine1[0], size=frames1[0].size(), align_corners=False)
-            img3 = F.grid_sample(frames1[0], tf, align_corners=False, mode="bilinear")
-
-            img1 = frames1[0, i, :].permute(1, 2, 0).numpy()
-            img2 = frames2[0, i, :].permute(1, 2, 0).numpy()
-            img3 = img3[i, :].permute(1, 2, 0).numpy()
-            mean_ = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
-            std_ = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
-
-            img1 = np.array((img1 * std_ + mean_) * 255, dtype=np.uint8)
-            img2 = np.array((img2 * std_ + mean_) * 255, dtype=np.uint8)
-            img3 = np.array((img3 * std_ + mean_) * 255, dtype=np.uint8)
-            # img3 = cv2.resize(img3, (0, 0), fx=8, fy=8)
-            img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2BGR)
-            img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
-            img3 = cv2.cvtColor(img3, cv2.COLOR_RGB2BGR)
-            # img1[..., 0] = 255
-            # img2[..., 0] = 255
-            # img2[..., 1] = img2[..., 0]
-            # img2[..., 2] = img2[..., 0]
-            # img3[..., 0] = 255
-            print(img1.shape)
-            cv2.imshow('img1', img1)
-            cv2.imshow('img2', img2)
-            cv2.imshow('img3', img3)
-            plt.show()
-            cv2.waitKey()
+    # dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
+    # dataloader = data.DataLoader(dataset, batch_size=2, \
+    #                              shuffle=True)
+    #
+    # for i, batch in enumerate(dataloader):
+    #     # frames1, frames2, affine1,_,labs1, labs2 = batch
+    #     frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+    #     for tt in batch:
+    #         print(tt.size())
+    #     assert frames1.size() == frames2.size(), "Frames shape mismatch"
+    #     frames1, frames2, affine1 = frames1_d, frames2_d, affine1_d
+    #     # We could simply do
+    #     #   images1 = frames1.flatten(0,1).cuda()
+    #     #   images2 = frames2.flatten(0,1).cuda()
+    #     # Instead we pull the reference frame from the 2nd view
+    #     # to the first view so that the regularising branch is
+    #     # always in evaluation mode to save the GPU memory
+    #     print(frames1.size(), affine1.size())
+    #     # print('affine_src',affine_src[0])
+    #     # print('affine_src_d',affine_src_d[0])
+    #     for i in range(cfg.DATASET.VIDEO_LEN):
+    #         print('affine1[0]', affine1.size())
+    #         # img3 = F.grid_sample(frames1[0], affine1[0], align_corners=False, mode="bilinear",padding_mode='reflection')
+    #
+    #         tf = F.affine_grid(affine1[0], size=frames1[0].size(), align_corners=False)
+    #         img3 = F.grid_sample(frames1[0], tf, align_corners=False, mode="bilinear")
+    #
+    #         img1 = frames1[0, i, :].permute(1, 2, 0).numpy()
+    #         img2 = frames2[0, i, :].permute(1, 2, 0).numpy()
+    #         img3 = img3[i, :].permute(1, 2, 0).numpy()
+    #         mean_ = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+    #         std_ = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
+    #
+    #         img1 = np.array((img1 * std_ + mean_) * 255, dtype=np.uint8)
+    #         img2 = np.array((img2 * std_ + mean_) * 255, dtype=np.uint8)
+    #         img3 = np.array((img3 * std_ + mean_) * 255, dtype=np.uint8)
+    #         # img3 = cv2.resize(img3, (0, 0), fx=8, fy=8)
+    #         img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2BGR)
+    #         img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
+    #         img3 = cv2.cvtColor(img3, cv2.COLOR_RGB2BGR)
+    #         # img1[..., 0] = 255
+    #         # img2[..., 0] = 255
+    #         # img2[..., 1] = img2[..., 0]
+    #         # img2[..., 2] = img2[..., 0]
+    #         # img3[..., 0] = 255
+    #         print(img1.shape)
+    #         cv2.imshow('img1', img1)
+    #         cv2.imshow('img2', img2)
+    #         cv2.imshow('img3', img3)
+    #         plt.show()
+    #         cv2.waitKey()
 
     net = ViT(cfg, ohem_range=ohem_range, is_thin=is_thin,is_dul=is_dul,is_neg = is_neg, first_kernal_size = first_kernal_size).cuda()
     net.cuda()
@@ -681,28 +646,21 @@ if __name__ == '__main__':
             loss_ce = pred_result['loss_ce']
             loss_color = pred_result['loss_color']
             color_lst = pred_result['color_lst']
-            loss_colorF = pred_result['loss_colorF']
-            color_lstF = pred_result['color_lstF']
             neg_loss = pred_result['neg_loss']
-            colorF_weight = 1
-            if not is_flip:
-                colorF_weight = 0
             if color_mode == 'AB':
                 loss_color *= 1.5
-                loss_colorF *= 1.5
             if is_dul:
-                loss = loss_ce + loss_color + loss_colorF * colorF_weight + loss_dul * 0.1
+                loss = loss_ce + loss_color + loss_dul * 0.1
             else:
-                loss = loss_ce + loss_color + loss_colorF * colorF_weight
+                loss = loss_ce + loss_color
 
             loss.backward()
             optimzer.step()
 
             timeStr = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-            print('{:0>3d}-{:0>6d} {} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f}'.format(epoch, i, timeStr, loss.item(),
+            print('{:0>3d}-{:0>6d} {} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f}'.format(epoch, i, timeStr, loss.item(),
                                                                                         loss_ce.item(),
                                                                                         loss_color.item(),
-                                                                                        loss_colorF.item(),
                                                                                         neg_loss.item(),
                                                                                         loss_dul.item(),
                                                                                         ))
@@ -727,13 +685,8 @@ if __name__ == '__main__':
                     color1 = color_lst[idx][0].detach().cpu().numpy().transpose(1, 2, 0).reshape(height, width, 3) * 255
                     color1 = np.array(color1, dtype=np.uint8)
 
-                    color1F = color_lstF[idx][0].detach().cpu().numpy().transpose(1, 2, 0).reshape(height, width,
-                                                                                                   3) * 255
-                    color1F = np.array(color1F, dtype=np.uint8)
-
                     cv2.imwrite('./images/COCO_img{}_gt.jpg'.format(idx), gt1)
                     cv2.imwrite('./images/COCO_img{}_pred.jpg'.format(idx), color1)
-                    cv2.imwrite('./images/COCO_imgF{}_pred.jpg'.format(idx), color1F)
 
         if epoch % 20 == 0:
             net_sd = net.convlocal.state_dict()

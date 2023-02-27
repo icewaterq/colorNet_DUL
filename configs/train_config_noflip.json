@@ -1,5 +1,5 @@
 {
-        "exp":"nodul",
+        "exp":"noflip",
         "first_kernal_size":3,
         "color_mode":"LAB",
         "is_dul":false,
@@ -8,7 +8,7 @@
         "is_liquid":true,
         "is_edge":true,
         "is_neg":true,
-        "is_flip": true,
+        "is_flip": false,
         "ohem_range":[0,1.0],
         "is_thin":false,
         "TEMP":25,

@@ -152,6 +152,8 @@ class ResNet(nn.Module):
         self._norm_layer = norm_layer
 
         self.inplanes = 64
+        if is_thin:
+            self.inplanes = 32
         self.dilation = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
@@ -169,14 +171,14 @@ class ResNet(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         if is_thin:
-            self.layer1 = self._make_layer(block, 64, layers[0])
-            self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-            self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
+            self.layer1 = self._make_layer(block, 32, layers[0])
+            self.layer2 = self._make_layer(block, 64, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+            self.layer3 = self._make_layer(block, 128, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
             self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
             self.inplanes = 256
             self.layer5 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
             self.layer6 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.layer7 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            # self.layer7 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
         else:
             self.layer1 = self._make_layer(block, 64, layers[0])
             self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
@@ -185,7 +187,7 @@ class ResNet(nn.Module):
             self.inplanes = 512
             self.layer5 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
             self.layer6 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.layer7 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            # self.layer7 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
 
         self.last_dim = 512
         if is_thin:
@@ -279,7 +281,7 @@ class ResNet(nn.Module):
 
         cls = self.layer5(cls)
         cls = self.layer6(cls)
-        cls = self.layer7(cls)
+        # cls = self.layer7(cls)
 
         q_color = self.query_color(color)
         q_cls = self.query_cls(cls)

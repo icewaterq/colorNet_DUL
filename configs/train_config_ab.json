@@ -1,7 +1,7 @@
 {
-        "exp":"nodul",
+        "exp":"ab",
         "first_kernal_size":3,
-        "color_mode":"LAB",
+        "color_mode":"AB",
         "is_dul":false,
         "is_aug":true,
         "is_shadow":true,
