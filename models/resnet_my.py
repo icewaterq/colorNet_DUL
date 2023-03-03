@@ -138,7 +138,7 @@ class ResNet(nn.Module):
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
         num_classes: int = 1000,
-        is_thin = False,        #是否创建更少通道的网络
+        model_size = 'L',        #模型尺寸，三个等级，L,M,S
         first_kernal_size = 3,  #第一个卷积的卷积核大小
         zero_init_residual: bool = False,
         groups: int = 1,
@@ -152,7 +152,11 @@ class ResNet(nn.Module):
         self._norm_layer = norm_layer
 
         self.inplanes = 64
-        if is_thin:
+        if model_size=='L':
+            self.inplanes = 64
+        if model_size=='M':
+            self.inplanes = 48
+        if model_size=='S':
             self.inplanes = 32
         self.dilation = 1
         if replace_stride_with_dilation is None:
@@ -170,16 +174,8 @@ class ResNet(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        if is_thin:
-            self.layer1 = self._make_layer(block, 32, layers[0])
-            self.layer2 = self._make_layer(block, 64, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-            self.layer3 = self._make_layer(block, 128, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
-            self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.inplanes = 256
-            self.layer5 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.layer6 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            # self.layer7 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-        else:
+
+        if model_size == 'L':
             self.layer1 = self._make_layer(block, 64, layers[0])
             self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
             self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
@@ -187,11 +183,31 @@ class ResNet(nn.Module):
             self.inplanes = 512
             self.layer5 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
             self.layer6 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            # self.layer7 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+        if model_size=='M':
+            self.layer1 = self._make_layer(block, 48, layers[0])
+            self.layer2 = self._make_layer(block, 96, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+            self.layer3 = self._make_layer(block, 192, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
+            self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            self.inplanes = 256
+            self.layer5 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            self.layer6 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+        if model_size=='S':
+            self.layer1 = self._make_layer(block, 32, layers[0])
+            self.layer2 = self._make_layer(block, 64, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+            self.layer3 = self._make_layer(block, 128, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
+            self.layer4 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            self.inplanes = 128
+            self.layer5 = self._make_layer(block, 128, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            self.layer6 = self._make_layer(block, 128, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
 
         self.last_dim = 512
-        if is_thin:
+        if model_size=='L':
+            self.last_dim = 512
+        if model_size=='M':
             self.last_dim = 256
+        if model_size=='S':
+            self.last_dim = 128
+
         self.query_color = nn.Sequential(
             nn.Conv2d(self.last_dim,self.last_dim,1,1),
             nn.BatchNorm2d(self.last_dim),
@@ -329,9 +345,17 @@ def resnet18(*, progress: bool = True, **kwargs: Any) -> ResNet:
 
 
 if __name__ == '__main__':
-    net = resnet18(is_thin = True,first_kernal_size = 3)
-    print(net)
-    x = torch.rand(2,3,256,256)
+    from thop import profile
+    from thop import clever_format
+
+    net = resnet18(model_size = 'S',first_kernal_size = 3)
+    # print(net)
+    x = torch.rand(1,3,256,256)
     color,cls,_,_ = net(x)
     print(color.size())
     print(cls.size())
+
+    flops, params = profile(net, inputs = (x,))
+    flops, params = clever_format([flops, params], "%.3f")
+    print(flops)
+    print(params)

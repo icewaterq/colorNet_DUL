@@ -65,3 +65,15 @@ def resnet18(pretrained='', remove_layers=[], train=True, **kwargs):
     model.remove_layers(remove_layers)
     setattr(model, "fdim", 512)
     return model
+
+if __name__=='__main__':
+    from thop import profile
+    from thop import clever_format
+
+    net = resnet18()
+    x = torch.rand(1,3,256,256)
+
+    flops, params = profile(net, inputs = (x,))
+    flops, params = clever_format([flops, params], "%.3f")
+    print(flops)
+    print(params)

@@ -304,7 +304,7 @@ def step_seg(cfg, net, labelprop, frames, mask_init):
 
             tsteps = list(ref_embd[t0].keys())
             for tt in tsteps:
-                if t - tt > cfg.TEST.CXT_SIZE and not tt in index_short:
+                if t - tt > cfg.TEST.CXT_SIZE * 2 and not tt in index_short:
                     del ref_embd[t0][tt]
                     del ref_masks[t0][tt]
 
@@ -341,7 +341,7 @@ if __name__ == '__main__':
     print('train_config')
     print(train_config)
 
-    model = resnet18(is_thin = train_config['is_thin'],first_kernal_size = train_config['first_kernal_size'])
+    model = resnet18(model_size = train_config['model_size'],first_kernal_size = train_config['first_kernal_size'])
 
     labelprop = LabelPropVOS_CRW(cfg)
     model.load_state_dict(net_sd, strict=True)

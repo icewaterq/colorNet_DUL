@@ -30,8 +30,6 @@ width = 256
 height = 256
 stride = 8
 patch_dim = stride * stride
-TEMP = 25
-
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
@@ -47,7 +45,7 @@ def l1_norm(input, axis=1):
 
 
 class ViT(nn.Module):
-    def __init__(self, cfg, ohem_range=[0.4, 1.0], is_thin=False, return_query = True, is_dul = False, is_neg = True, first_kernal_size = 3):
+    def __init__(self, cfg, ohem_range=[0.4, 1.0], model_size = 'L', is_dul = False, is_neg = True, first_kernal_size = 3, TEMP = 25):
         super().__init__()
 
         self.cls_num = 16
@@ -55,16 +53,16 @@ class ViT(nn.Module):
         self.ohem_range = ohem_range
         print('net ohem range', ohem_range)
 
-        self.convlocal = resnet18(is_thin=is_thin, first_kernal_size = first_kernal_size)
+        self.convlocal = resnet18(model_size = model_size, first_kernal_size = first_kernal_size)
         self.eye = None
-        self.return_query = return_query
         self.is_dul = is_dul
         self.is_neg = is_neg
+        self.TEMP = TEMP
 
         print('.....init network.')
-        print('return_query',self.return_query)
         print('is_dul', self.is_dul)
         print('is_neg', self.is_neg)
+        print('TEMP', self.TEMP)
 
     def _align_my(self, x, tf):
         return F.grid_sample(x, tf, align_corners=False, mode="nearest", padding_mode='reflection')
@@ -316,17 +314,12 @@ class ViT(nn.Module):
             affines_d = affines_d.flatten(0, 1).cuda()
             affine_src_d = affine_src_d.flatten(0, 1).cuda()
 
-            if self.return_query:
-                _, key1_cls, _, _ = self.convlocal(images1_d)
-            else:
-                _, _, _, key1_cls = self.convlocal(images1_d)
+
+            _, key1_cls, _, _ = self.convlocal(images1_d)
             _, C, H, W = key1_cls.size()
 
             with torch.no_grad():
-                if self.return_query:
-                    _, key2_cls, _, _ = self.convlocal(images2_d)
-                else:
-                    _, _, _, key2_cls = self.convlocal(images2_d)
+                _, key2_cls, _, _ = self.convlocal(images2_d)
 
             key1_cls, key2_cls = self.fetch_first(key1_cls, key2_cls, T)
 
@@ -342,17 +335,12 @@ class ViT(nn.Module):
             result['loss_dul'] = loss_dul
 
         # =============================================================
-        if self.return_query:
-            key1, _, _, _ = self.convlocal(img1)
-        else:
-            _, _, key1, _ = self.convlocal(img1)
+        key1, _, _, _ = self.convlocal(img1)
         _, C, H, W = key1.size()
 
         with torch.no_grad():
-            if self.return_query:
-                key2, _, _, _ = self.convlocal(img2)
-            else:
-                _, _, key2, _ = self.convlocal(img2)
+            key2, _, _, _ = self.convlocal(img2)
+
         key2 = key2.permute(0, 2, 3, 1).reshape(B, T, -1, C)  # B,T,HW,C
         key1 = key1.permute(0, 2, 3, 1).reshape(B, T, -1, C)
 
@@ -377,7 +365,7 @@ class ViT(nn.Module):
                     if i == j:
                         continue
                     featp2 = torch.cat([key1[:, j], torch.flip(key1[:, j], [0])], 1)
-                    att1 = torch.bmm(featp2[:, :HW], featp1.permute(0, 2, 1)) * TEMP
+                    att1 = torch.bmm(featp2[:, :HW], featp1.permute(0, 2, 1)) *  self.TEMP
                     att1 = F.softmax(att1, dim=2)  # [B,HW,HW2]
 
                     gt1 = labLst[:, j]
@@ -401,7 +389,7 @@ class ViT(nn.Module):
                     if i == j:
                         continue
                     featp2 = key1[:, j]
-                    att1 = torch.bmm(featp2, featp1.permute(0, 2, 1)) * TEMP
+                    att1 = torch.bmm(featp2, featp1.permute(0, 2, 1)) *  self.TEMP
                     att1 = F.softmax(att1, dim=2)  # [B,HW,HW]
 
                     gt1 = labLst[:, j]
@@ -471,20 +459,20 @@ def init_random_seed(seed):
 
 def load_trai_config(path):
     train_config = {
-        'exp':'benchmark',
-        'first_kernal_size':3,
-        'color_mode':'LAB',
-        'is_dul':True,
-        'is_aug':True,
-        'is_shadow':True,
-        'is_liquid':True,
-        'is_edge':True,
-        'is_neg':True,
-        'is_flip':True,
-        'ohem_range':[0,1.0],
-        'is_thin':True,
-        'TEMP':25,
-        'is_cos_lr':True
+        "exp":"benchmark",
+        "first_kernal_size":3,
+        "color_mode":"LAB",
+        "is_dul":True,
+        "is_aug":True,
+        "is_shadow":True,
+        "is_liquid":True,
+        "is_edge":True,
+        "is_neg":True,
+        "ohem_range":[0,1.0],
+        "model_size":"L",
+        "TEMP":25,
+        "is_cos_lr":True,
+        "video_len": 5
     }
     if not os.path.exists(path):
         print('train config file {} not existed, exited.'.format(path))
@@ -499,10 +487,6 @@ def load_trai_config(path):
 
 if __name__ == '__main__':
     init_random_seed(777)
-    cfg_from_file(r'./configs/ytvos.yaml')
-    cfg.MODEL.FEATURE_DIM = 128
-    cfg.DATASET.VIDEO_LEN = 2
-    cfg.DATASET.RND_ZOOM_RANGE = [0.5, 1.]
 
     parser = argparse.ArgumentParser('')
     parser.add_argument('--exp', default='benchmark', type=str, help="实验信息")
@@ -527,13 +511,16 @@ if __name__ == '__main__':
     is_liquid = train_config['is_liquid']
     is_edge = train_config['is_edge']
     is_neg = train_config['is_neg']
-    is_flip = train_config['is_flip']
     ohem_range = train_config['ohem_range']
-    is_thin = train_config['is_thin']
+    model_size = train_config['model_size']
     TEMP = train_config['TEMP']
     is_cos_lr = train_config['is_cos_lr']
+    video_len = train_config['video_len']
 
-
+    cfg_from_file(r'./configs/ytvos.yaml')
+    cfg.MODEL.FEATURE_DIM = 128
+    cfg.DATASET.VIDEO_LEN = video_len
+    cfg.DATASET.RND_ZOOM_RANGE = [0.5, 1.]
 
     # dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
     # dataloader = data.DataLoader(dataset, batch_size=2, \
@@ -587,10 +574,10 @@ if __name__ == '__main__':
     #         plt.show()
     #         cv2.waitKey()
 
-    net = ViT(cfg, ohem_range=ohem_range, is_thin=is_thin,is_dul=is_dul,is_neg = is_neg, first_kernal_size = first_kernal_size).cuda()
+    net = ViT(cfg, ohem_range=ohem_range, model_size=model_size,is_dul=is_dul,is_neg = is_neg, first_kernal_size = first_kernal_size, TEMP = TEMP).cuda()
     net.cuda()
     print(net.convlocal.conv1)
-    print(net.convlocal.layer7)
+    print(net.convlocal.layer6)
 
     optimzer = optimzer.AdamW(net.parameters(), lr=0.0001, eps=1e-8, betas=[0.9, 0.95])
     dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos',is_aug=is_aug,is_shadow=is_shadow,is_dul=is_dul,is_liquid=is_liquid)
@@ -650,7 +637,7 @@ if __name__ == '__main__':
             if color_mode == 'AB':
                 loss_color *= 1.5
             if is_dul:
-                loss = loss_ce + loss_color + loss_dul * 0.1
+                loss = loss_ce + loss_color + loss_dul * 0.01
             else:
                 loss = loss_ce + loss_color
 
@@ -658,7 +645,7 @@ if __name__ == '__main__':
             optimzer.step()
 
             timeStr = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-            print('{:0>3d}-{:0>6d} {} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f}'.format(epoch, i, timeStr, loss.item(),
+            print(expid,'{:0>3d}-{:0>6d} {} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f}'.format(epoch, i, timeStr, loss.item(),
                                                                                         loss_ce.item(),
                                                                                         loss_color.item(),
                                                                                         neg_loss.item(),
@@ -688,7 +675,7 @@ if __name__ == '__main__':
                     cv2.imwrite('./images/COCO_img{}_gt.jpg'.format(idx), gt1)
                     cv2.imwrite('./images/COCO_img{}_pred.jpg'.format(idx), color1)
 
-        if epoch % 20 == 0:
+        if epoch % 20 == 0 or epoch > 290:
             net_sd = net.convlocal.state_dict()
             save_dict = {
                 'model': net_sd,

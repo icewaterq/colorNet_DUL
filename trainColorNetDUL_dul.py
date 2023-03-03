@@ -47,15 +47,16 @@ def l1_norm(input, axis=1):
 
 
 class ViT(nn.Module):
-    def __init__(self, cfg, ohem_range=[0.4, 1.0]):
+    def __init__(self, cfg, ohem_range=[0.0, 1.0], model_size = 'L'):
         super().__init__()
 
         self.cls_num = 16
         self.cfg = cfg
         self.ohem_range = ohem_range
         print('net ohem range', ohem_range)
+        print('model_size',model_size)
 
-        self.convlocal = resnet18(is_thin=True, first_kernal_size = 3)
+        self.convlocal = resnet18(model_size=model_size, first_kernal_size = 3)
         self.eye = None
 
     def _align(self, x, t):
@@ -360,17 +361,13 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('')
     parser.add_argument('--exp', default='benchmark', type=str, help="实验信息")
-    parser.add_argument('--is_ohem', action='store_true')
+    parser.add_argument('--model_size', default='L', type=str, help="模型尺寸")
     args = parser.parse_args()
 
     expid = args.exp
-    if args.is_ohem:
-        ohem_range = [0.35,0.95]
-    else:
-        ohem_range = [0.0, 1.0]
+    model_size = args.model_size
 
-
-    net = ViT(cfg, ohem_range=ohem_range).cuda()
+    net = ViT(cfg,model_size = model_size).cuda()
     net.cuda()
     print(net.convlocal.conv1)
     print(net.convlocal.layer6)
@@ -405,8 +402,7 @@ if __name__ == '__main__':
             save_dict = {
                 'model': net_sd,
                 'train_config': {'expid':expid,
-                                 'ohem_range':ohem_range,
-                                 'is_thin':True,
+                                 'model_size':model_size,
                                  'first_kernal_size':3
                                  }
             }

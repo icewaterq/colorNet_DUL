@@ -52,11 +52,22 @@ class LabelPropVOS_CRW(LabelPropVOS):
     def context_long(self, t0, t):
         return [t0]
 
+    # def context_short(self, t0, t):
+    #     to_t = t
+    #     from_t = to_t - self.cxt_size
+    #     timesteps = [max(tt, t0) for tt in range(from_t, to_t)]
+    #     return timesteps
+
     def context_short(self, t0, t):
+        # stride_lst = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 8]
+        stride_lst = [1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 12, 14, 16, 18, 20, 23, 26, 30, 34, 39]
         to_t = t
         from_t = to_t - self.cxt_size
-        timesteps = [max(tt, t0) for tt in range(from_t, to_t)]
+        timesteps = []
+        for stride in stride_lst:
+            timesteps.insert(0,max(t0 ,to_t - stride))
         return timesteps
+
 
     def context_index(self, t0, t):
         index_short = self.context_short(t0, t)
