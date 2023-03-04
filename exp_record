@@ -1,0 +1,29 @@
+model size M
+color + dul  所有条件
+color 所有条件
+color 去除aug
+color 去除edge
+color video_len 2 3 4 5
+color kernal size 7
+color 去除空间一致性
+dul
+
+model size S
+color + dul  所有条件
+color 所有条件
+
+
+
+模型大小
+color
+L  12.271G  11.498M
+M   4.305G   3.925M
+S   1.485G   1.319M
+
+color_dul
+L  55.049G  53.260M
+M  15.192G  14.549M
+S   4.277G   4.043M
+
+dul resnet18
+   12.397G  11.506M

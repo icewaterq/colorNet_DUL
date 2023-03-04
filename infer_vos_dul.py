@@ -341,7 +341,10 @@ if __name__ == '__main__':
     print('train_config')
     print(train_config)
 
-    model = resnet18(model_size = train_config['model_size'],first_kernal_size = train_config['first_kernal_size'])
+    feat_mode = 'color_dul'
+    if not train_config['is_dul']:
+        feat_mode  = 'color'
+    model = resnet18(model_size = train_config['model_size'],first_kernal_size = train_config['first_kernal_size'],feat_mode = feat_mode)
 
     labelprop = LabelPropVOS_CRW(cfg)
     model.load_state_dict(net_sd, strict=True)

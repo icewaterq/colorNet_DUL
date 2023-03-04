@@ -1,5 +1,5 @@
 {
-        "exp":"benchmark",
+        "exp":"color_len2_L",
         "first_kernal_size":3,
         "color_mode":"LAB",
         "is_dul":false,
@@ -8,9 +8,10 @@
         "is_liquid":true,
         "is_edge":true,
         "is_neg":true,
+        "space_consistency":true,
         "ohem_range":[0,1.0],
-        "model_size":"S",
+        "model_size":"L",
         "TEMP":25,
         "is_cos_lr":true,
-        "video_len": 5
+        "video_len": 2
     }

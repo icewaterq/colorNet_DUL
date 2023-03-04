@@ -1,5 +1,5 @@
 {
-        "exp":"benchmark",
+        "exp":"benchmark_S",
         "first_kernal_size":3,
         "color_mode":"LAB",
         "is_dul":true,
@@ -8,6 +8,7 @@
         "is_liquid":true,
         "is_edge":true,
         "is_neg":true,
+        "space_consistency":true,
         "ohem_range":[0,1.0],
         "model_size":"S",
         "TEMP":25,

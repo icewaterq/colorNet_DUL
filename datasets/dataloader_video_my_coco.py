@@ -9,16 +9,17 @@ import random
 import torch
 import math
 import glob
-from os.path import join,basename
 
 from PIL import Image,ImageFilter,ImageOps
 import numpy as np
 
 from .dataloader_base import DLBase
-import datasets.daugm_video_my as tf
+import datasets.daugm_video as tf
+import datasets.daugm_video_my as tf_my
 import cv2
 from torchvision import transforms
 import torch.nn.functional as F
+from os.path import join
 
 def datanorm(x):
     minv = np.min(x)
@@ -108,6 +109,37 @@ def addFakeShadow(img, n=2):
             img[mask > 127] = imggamma[mask > 127]
     return img
 
+def shadow(img):
+    h, w, _ = img.shape
+    imgarr = np.array(img, dtype=np.float32)
+    imgarr = imgarr.swapaxes(1, 2).swapaxes(0, 1)
+
+    if random.random() < 0.5:
+        tmp = np.linspace(0, np.pi * (random.random() * 3 + 0.5), num=w) + random.random() * np.pi * 2
+        tmp = np.sin(tmp) * 0.35 + 0.85
+        tmp = np.clip(tmp, 0.5, 1.2)
+        grad = np.array([tmp for i in range(h)])
+    else:
+        tmp = np.linspace(0, np.pi * (random.random() * 3 + 0.5), num=h) + random.random() * np.pi * 2
+        tmp = np.sin(tmp) * 0.35 + 0.85
+        tmp = np.clip(tmp, 0.5, 1.2)
+        grad = np.array([tmp for i in range(w)])
+        grad = grad.swapaxes(0, 1)
+
+    imgarr = (imgarr - np.min(imgarr)) / np.max(imgarr)
+
+    offset = np.mean(imgarr) - 0.5
+    grad = grad + offset
+    grad = np.clip(grad, 0.5, 1.2)
+
+    imgarr[0] = imgarr[0] ** grad
+    imgarr[1] = imgarr[1] ** grad
+    imgarr[2] = imgarr[2] ** grad
+
+    imgarr = imgarr * 255
+    imgarr = imgarr.swapaxes(0, 1).swapaxes(1, 2).astype(np.uint8)
+    return imgarr
+
 def randomMask(img,stride,p):
     h,w,c = img.shape
     img = img.reshape(h//stride, stride, w//stride, stride, c).transpose(0,2,1,3,4).reshape(-1,stride * stride, c)
@@ -172,10 +204,10 @@ def generateMap(w,h):
     mapX,mapY = np.meshgrid(np.arange(0, w), np.arange(0, h))
     mapX = mapX.astype(np.float32)
     mapY = mapY.astype(np.float32)
-    markPoints = [[random.randint(-int(0.2 * w), int(1.2 * w)), random.randint(-int(0.2 * h), int(1.2 * h))] for _ in range(6)]
+    markPoints = [[random.randint(-int(0.2 * w), int(1.2 * w)), random.randint(-int(0.2 * h), int(1.2 * h))] for _ in range(8)]
     for mp in markPoints:
         cx, cy = mp
-        ox, oy = random.randint(8, 20)*random.choice([1,-1]), random.randint(8,20)*random.choice([1,-1])
+        ox, oy = random.randint(12, 24)*random.choice([1,-1]), random.randint(12,24)*random.choice([1,-1])
         dis = ((mX - cx) ** 2 + (mY - cy) ** 2) ** 0.5
         ratio = np.clip(1 - dis / 100, 0, 1)
         mapX += ox * ratio
@@ -266,14 +298,25 @@ def findEdge2(img,lenThresh,stride,scale = 1):
     mask2 = (mask2.astype(np.float32)/255) * 4 + 1
     return mask2
 
+
 class DataVideo(DLBase):
 
-    def __init__(self, cfg, split, val=False):
+    def __init__(self, cfg, split, val=False,is_aug = True,is_shadow = True,is_dul = True, is_liquid = True):
         super(DataVideo, self).__init__()
 
         self.cfg = cfg
         self.split = split
         self.val = val
+        self.is_aug = is_aug
+        self.is_shadow = is_shadow
+        self.is_dul = is_dul
+        self.is_liquid = is_liquid
+        print('init dataset.....')
+        print('is_aug',self.is_aug)
+        print('is_shadow', self.is_shadow)
+        print('is_dul', self.is_dul)
+        print('is_liquid', self.is_liquid)
+
 
         self.cfg_frame_gap = cfg.DATASET.VAL_FRAME_GAP if val else cfg.DATASET.FRAME_GAP
 
@@ -338,19 +381,18 @@ class DataVideo(DLBase):
 
         self._num_samples = num_frames[0]
         self._init_augm(cfg)
+        self._init_augm_my(cfg)
 
-        self.color_jitter_l = transforms.Compose([
-            AddFakeShadow(0.6),
+        aug_lst_L = [
             transforms.RandomApply(
                 [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
                 p=0.8
             ),
             transforms.RandomGrayscale(p=0.2),
-            GaussianBlur(0.2),
-        ])
+            GaussianBlur(0.2)
+        ]
 
-        self.color_jitter_s = transforms.Compose([
-            AddFakeShadow(0.6),
+        aug_lst_S = [
             transforms.RandomApply(
                 [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
                 p=0.8
@@ -358,7 +400,16 @@ class DataVideo(DLBase):
             transforms.RandomGrayscale(p=0.2),
             GaussianBlur(0.3),
             Solarization(0.1),
-        ])
+        ]
+
+        if is_shadow:
+            print('add shadow aug.')
+            aug_lst_L.insert(0, AddFakeShadow(0.6))
+            aug_lst_S.insert(0, AddFakeShadow(0.6))
+
+        self.color_jitter_l = transforms.Compose(aug_lst_L)
+        self.color_jitter_s = transforms.Compose(aug_lst_S)
+
         self.random_mask = transforms.Compose([
             AddRandomMask(0.5)
         ])
@@ -366,8 +417,6 @@ class DataVideo(DLBase):
         self.cocodir = r'/root/autodl-tmp/dataset/COCO/train2017'
         # self.cocodir = r'E:\public_dataset\detect\COCO\val2017'
         self.coco_flist = os.listdir(self.cocodir)
-
-
 
     def _init_augm(self, cfg):
 
@@ -385,6 +434,7 @@ class DataVideo(DLBase):
         # general affine transformations
         #
         tfs_pre.append(tf.MaskScaleSmallest(cfg.DATASET.SMALLEST_RANGE))
+
         if cfg.DATASET.RND_CROP:
             tfs_pre.append(tf.MaskRandCrop(cfg.DATASET.CROP_SIZE, pad_if_needed=True))
         else:
@@ -413,12 +463,57 @@ class DataVideo(DLBase):
         # image to the teacher will have no noise
         self.tf_post = tf.Compose(tfs_post)
 
+    def _init_augm_my(self, cfg):
+
+        # general (unguided) affine transformations
+        tfs_pre = [tf_my.CreateMask()]
+        self.tf_pre_my = tf_my.Compose(tfs_pre)
+
+        # photometric noise
+        tfs_affine = []
+
+        # guided affine transformations
+        tfs_augm = []
+
+        # 1.
+        # general affine transformations
+        #
+        tfs_pre.append(tf_my.MaskScaleSmallest(cfg.DATASET.SMALLEST_RANGE))
+        if cfg.DATASET.RND_CROP:
+            tfs_pre.append(tf_my.MaskRandCrop_My(cfg.DATASET.CROP_SIZE, pad_if_needed=True))
+        else:
+            tfs_pre.append(tf_my.MaskCenterCrop(cfg.DATASET.CROP_SIZE))
+
+        if cfg.DATASET.RND_HFLIP:
+            tfs_pre.append(tf_my.MaskRandHFlip())
+
+        # 2.
+        # Guided affine transformation
+        #
+        if cfg.DATASET.GUIDED_HFLIP:
+            tfs_affine.append(tf_my.GuidedRandHFlip())
+
+        # this will add affine transformation
+        if cfg.DATASET.RND_ZOOM:
+            tfs_affine.append(tf_my.MaskRandScaleCrop(*cfg.DATASET.RND_ZOOM_RANGE))
+
+        self.tf_affine_my = tf_my.Compose(tfs_affine)
+        self.tf_affine2_my = tf_my.Compose([tf_my.AffineIdentity()])
+
+        tfs_post = [tf_my.ToTensorMask(),
+                    tf_my.Normalize(mean=self.MEAN, std=self.STD),
+                    tf_my.ApplyMask(-1)]
+
+        # image to the teacher will have no noise
+        self.tf_post_my = tf_my.Compose(tfs_post)
+
+
     def set_num_samples(self, n):
         print("Re-setting # of samples: {:d} -> {:d}".format(self._num_samples, n))
         self._num_samples = n
 
     def __len__(self):
-        return int(len(self.images) * 1.0) #self._num_samples
+        return len(self.images) #self._num_samples
 
     def denorm(self, image):
 
@@ -487,80 +582,37 @@ class DataVideo(DLBase):
         return affine_inv
 
     def __getitem__(self, index):
-        isCOCO = False
-        if index >= len(self.images):
-            isCOCO = True
-        isCOCO = True
-
         images = []
+        images_dul = []
+        img = Image.open(join(self.cocodir, random.choice(self.coco_flist))).convert('RGB')
+        if random.random() < 0.3:
+            img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        img = np.asarray(img)
+        img = cv2.resize(img, (512, 320))
+        for i in range(self.cfg.DATASET.VIDEO_LEN):
+            mapX, mapY, _, _ = generateMap(img.shape[1], img.shape[0])
+            img_remap = cv2.remap(img, mapX, mapY, cv2.INTER_LINEAR)
+            img_remap = Image.fromarray(img_remap)
+            if random.random() < 0.5:
+                img_remap = img_remap.rotate(random.randint(-30, 30))
+            images_dul.append(img_remap)
+            if random.random() < 0.7:
+                w, h = img_remap.size
+                sx = int(w * random.random() * 0.25)
+                sy = int(h * random.random() * 0.25)
+                w = int(w * (random.random() * 0.25 + 0.5))
+                h = int(h * (random.random() * 0.25 + 0.5))
+                img_remap = img_remap.crop((sx, sy, sx + w, sy + h))
+                img_remap = img_remap.resize((512, 320))
+            images.append(img_remap)
 
-        if isCOCO:
-            img = Image.open(join(self.cocodir,random.choice(self.coco_flist))).convert('RGB')
-            if random.random()<0.3:
-                img = img.transpose(Image.FLIP_TOP_BOTTOM)
-            img = np.asarray(img)
-            img = cv2.resize(img,(512,320))
-            for i in range(self.cfg.DATASET.VIDEO_LEN):
-                mapX,mapY,_,_ = generateMap(img.shape[1],img.shape[0])
-                img_remap = cv2.remap(img, mapX, mapY, cv2.INTER_LINEAR)
-                img_remap = Image.fromarray(img_remap)
-                if random.random()<0.5:
-                    img_remap = img_remap.rotate(random.randint(-30,30))
-                if random.random()<0.7:
-                    w,h = img_remap.size
-                    sx = int(w * random.random() * 0.25)
-                    sy = int(h * random.random() * 0.25)
-                    w = int(w * (random.random() * 0.25 + 0.5))
-                    h = int(h * (random.random() * 0.25 + 0.5))
-                    img_remap = img_remap.crop((sx,sy,sx+w,sy+h))
-                    img_remap = img_remap.resize((512,320))
-                images.append(img_remap)
-        else:
-            # searching for the video clip ID
-            sequence = self.images[index] # % len(self.images)]
-            seqlen = len(sequence)
-
-            assert self.cfg_frame_gap > 0, "Frame gap should be positive"
-            t_window = self.cfg_frame_gap * self.cfg.DATASET.VIDEO_LEN
-
-            # reduce sampling gap for short clips
-            t_window = min(seqlen, t_window)
-            frame_gap = t_window // self.cfg.DATASET.VIDEO_LEN
-
-            # strided slice
-            frame_ids = torch.arange(t_window)[::frame_gap]
-            frame_ids = frame_ids[:self.cfg.DATASET.VIDEO_LEN]
-            assert len(frame_ids) == self.cfg.DATASET.VIDEO_LEN
-
-            # selecting a random start
-            index_start = random.randint(0, seqlen - frame_ids[-1] - 1)
-            # permuting the frames in the batch
-            random_ids = torch.randperm(self.cfg.DATASET.VIDEO_LEN)
-            # adding the offset
-            frame_ids = frame_ids[random_ids] + index_start
-
-            # print('frame_ids',frame_ids)
-
-            # forward sequence
-            for frame_id in frame_ids:
-                fn = sequence[frame_id]
-                images.append(Image.open(fn).convert('RGB'))
-
-        # 1. general transforms
-        frames, valid = self.tf_pre(images)
-
-        # 1.1 creating two sequences in forward/backward order
+        #===================================my=================================
+        frames, valid = self.tf_pre_my(images)
         frames1, valid1 = frames[:], valid[:]
-
-        # second copy
         frames2 = [f.copy() for f in frames]
         valid2 = [v.copy() for v in valid]
-
-        # 2. guided affine transforms
-        frames1, valid1, affine_params1 = self.tf_affine(frames1, valid1)
-        frames2, valid2, affine_params2 = self.tf_affine2(frames2, valid2)
-
-
+        frames1, valid1, affine_params1 = self.tf_affine_my(frames1, valid1)
+        frames2, valid2, affine_params2 = self.tf_affine2_my(frames2, valid2)
         labs1 = []
         labs2 = []
         rgbs1 = []
@@ -590,29 +642,24 @@ class DataVideo(DLBase):
         rgbs1 = torch.from_numpy(rgbs1)
         rgbs2 = torch.from_numpy(rgbs2)
 
+
         w_mask_lst = []
         for i in range(self.cfg.DATASET.VIDEO_LEN):
-            frames1[i] = self.color_jitter_s(frames1[i])
-            frames2[i] = self.color_jitter_l(frames2[i])
+            if self.is_aug:
+                frames1[i] = self.color_jitter_s(frames1[i])
+                frames2[i] = self.color_jitter_l(frames2[i])
             w_mask = findEdge2(np.asarray(frames2[i]), 16, 16, scale=0.5)
             w_mask_lst.append(w_mask)
-        w_mask_lst = np.array(w_mask_lst)  # T,H,W,3
-        w_mask_lst = w_mask_lst.transpose(0, 3, 1, 2)
+
+        w_mask_lst = np.array(w_mask_lst) #T,H,W,3
+        w_mask_lst = w_mask_lst.transpose(0,3,1,2)
         w_mask_lst = torch.from_numpy(w_mask_lst)
 
 
-        # if random.random()<0.5:
-        #     for i in range(self.cfg.DATASET.VIDEO_LEN):
-        #         frames1[i] = self.color_jitter_s(frames1[i])
-        #         frames2[i] = self.color_jitter_l(frames2[i])
-        # else:
-        #     for i in range(self.cfg.DATASET.VIDEO_LEN):
-        #         frames2[i] = self.random_mask(frames2[i])
-
         # convert to tensor, zero out the values
 
-        frames1 = self.tf_post(frames1, valid1)
-        frames2 = self.tf_post(frames2, valid2)
+        frames1 = self.tf_post_my(frames1, valid1)
+        frames2 = self.tf_post_my(frames2, valid2)
 
         # converting the affine transforms
         aff_reg = self._get_affine(affine_params1)
@@ -623,18 +670,62 @@ class DataVideo(DLBase):
         aff_reg = aff_main # identity affine2_inv
         aff_main = aff_reg_inv
 
-        # for i in range(self.cfg.DATASET.VIDEO_LEN):
-        #     if random.random()<0.5:
-        #         frames2[i] = randomMaskTensor(frames2[i], 16,random.random() * 0.15 + 0.15)
-        #         frames2[i] = randomMaskTensor(frames2[i], 28,random.random() * 0.15 + 0.15)
-
         frames1 = torch.stack(frames1, 0)
         frames2 = torch.stack(frames2, 0)
 
-        aff_main = F.affine_grid(aff_main, size=(frames1.size(0),self.cfg.MODEL.FEATURE_DIM+1000,frames1.size(2)//8,frames1.size(3)//8), align_corners=False)
+        aff_main = F.affine_grid(aff_main, size=(frames1.size(0),self.cfg.MODEL.FEATURE_DIM,frames1.size(2)//8,frames1.size(3)//8), align_corners=False)
         aff_reg = F.affine_grid(aff_reg, size=(frames1.size(0),self.cfg.MODEL.FEATURE_DIM,frames1.size(2)//8,frames1.size(3)//8), align_corners=False)
-
 
         assert frames1.shape == frames2.shape
 
-        return frames2, frames1, aff_main, aff_reg, labs2, labs1, rgbs2, rgbs1, w_mask_lst
+        # ===================================my=================================
+
+        # ===================================dul=================================
+        if self.is_dul:
+            frames_dul, valid_dul = self.tf_pre(images_dul)
+
+            frames1_dul, valid1_dul = frames_dul[:], valid_dul[:]
+            frames2_dul = [f.copy() for f in frames_dul]
+            valid2_dul = [v.copy() for v in valid_dul]
+
+            frames1_dul, valid1_dul, affine_params1_dul = self.tf_affine(frames1_dul, valid1_dul)
+            frames2_dul, valid2_dul, affine_params2_dul = self.tf_affine2(frames2_dul, valid2_dul)
+
+
+            frames1_dul = self.tf_post(frames1_dul, valid1_dul)
+            frames2_dul = self.tf_post(frames2_dul, valid2_dul)
+
+            aff_reg_dul = self._get_affine(affine_params1_dul)
+            aff_main_dul = self._get_affine(affine_params2_dul)
+
+            aff_reg_inv_dul = self._get_affine_inv(aff_reg_dul, affine_params1_dul)
+            aff_reg_dul = aff_main_dul
+            aff_main_dul = aff_reg_inv_dul
+
+            frames1_dul = torch.stack(frames1_dul, 0)
+            frames2_dul = torch.stack(frames2_dul, 0)
+            return frames2, frames1, aff_main, aff_reg, labs2, labs1, rgbs2, rgbs1, w_mask_lst, frames2_dul, frames1_dul, aff_main_dul, aff_reg_dul
+            # ===================================dul=================================
+        else:
+            return frames2, frames1, aff_main, aff_reg, labs2, labs1, rgbs2, rgbs1, w_mask_lst
+
+
+
+if __name__=='__main__':
+    aug_lst_S = [
+        transforms.RandomApply(
+            [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+            p=0.8
+        ),
+        transforms.RandomGrayscale(p=0.2),
+        GaussianBlur(0.3),
+        Solarization(1.9),
+    ]
+    aug_lst_S.insert(0, AddFakeShadow(0.6))
+
+    color_jitter_s = transforms.Compose(aug_lst_S)
+    img = Image.open(r'D:\temp\line12crop.jpg')
+    # img2 = color_jitter_s(img)
+    img2 = img.copy()
+    img.show()
+    img2.show()

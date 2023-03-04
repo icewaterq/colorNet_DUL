@@ -137,9 +137,9 @@ class ResNet(nn.Module):
         self,
         block: Type[Union[BasicBlock, Bottleneck]],
         layers: List[int],
-        num_classes: int = 1000,
         model_size = 'L',        #模型尺寸，三个等级，L,M,S
         first_kernal_size = 3,  #第一个卷积的卷积核大小
+        feat_mode = 'color_dul', #特征模式，当模式为color的时候，layer5和layer6则不计算
         zero_init_residual: bool = False,
         groups: int = 1,
         width_per_group: int = 64,
@@ -158,6 +158,7 @@ class ResNet(nn.Module):
             self.inplanes = 48
         if model_size=='S':
             self.inplanes = 32
+        self.feat_mode = feat_mode
         self.dilation = 1
         if replace_stride_with_dilation is None:
             # each element in the tuple indicates if we should replace
@@ -174,39 +175,34 @@ class ResNet(nn.Module):
         self.bn1 = norm_layer(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        layer_ch_lst = [64,128,256,1024,512,512]
 
         if model_size == 'L':
-            self.layer1 = self._make_layer(block, 64, layers[0])
-            self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-            self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
-            self.layer4 = self._make_layer(block, 1024, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.inplanes = 512
-            self.layer5 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.layer6 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-        if model_size=='M':
-            self.layer1 = self._make_layer(block, 48, layers[0])
-            self.layer2 = self._make_layer(block, 96, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-            self.layer3 = self._make_layer(block, 192, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
-            self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.inplanes = 256
-            self.layer5 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.layer6 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-        if model_size=='S':
-            self.layer1 = self._make_layer(block, 32, layers[0])
-            self.layer2 = self._make_layer(block, 64, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
-            self.layer3 = self._make_layer(block, 128, layers[2], stride=1, dilate=replace_stride_with_dilation[1])
-            self.layer4 = self._make_layer(block, 256, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.inplanes = 128
-            self.layer5 = self._make_layer(block, 128, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
-            self.layer6 = self._make_layer(block, 128, layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            layer_ch_lst = [64, 128, 256, 1024, 512, 512]
+        if model_size == 'M':
+            layer_ch_lst = [48,  96, 192, 512,  256, 256]
+        if model_size == 'S':
+            layer_ch_lst = [32,  64, 128, 256,  128, 128]
 
-        self.last_dim = 512
-        if model_size=='L':
-            self.last_dim = 512
-        if model_size=='M':
-            self.last_dim = 256
-        if model_size=='S':
-            self.last_dim = 128
+        if feat_mode == 'color':
+            layer_ch_lst[3] = layer_ch_lst[3] // 2
+
+
+        self.layer1 = self._make_layer(block, layer_ch_lst[0], layers[0])
+        self.layer2 = self._make_layer(block, layer_ch_lst[1], layers[1], stride=2, dilate=replace_stride_with_dilation[0])
+        self.layer3 = self._make_layer(block, layer_ch_lst[2], layers[2], stride=1, dilate=replace_stride_with_dilation[1])
+        self.layer4 = self._make_layer(block, layer_ch_lst[3], layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+
+        if self.feat_mode == 'color':
+            self.layer5 = None
+            self.layer6 = None
+        else:
+            self.inplanes = layer_ch_lst[4]
+            self.layer5 = self._make_layer(block, layer_ch_lst[4], layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+            self.layer6 = self._make_layer(block, layer_ch_lst[5], layers[3], stride=1, dilate=replace_stride_with_dilation[2])
+
+        self.last_dim = layer_ch_lst[5]
+
 
         self.query_color = nn.Sequential(
             nn.Conv2d(self.last_dim,self.last_dim,1,1),
@@ -292,22 +288,27 @@ class ResNet(nn.Module):
         x = self.layer3(x)
         x = self.layer4(x)
 
-        color = x[:,:self.last_dim]
-        cls = x[:, self.last_dim:]
+        if self.feat_mode == 'color':
+            color = x
+            q_color = self.query_color(color)
+            q_color = F.normalize(q_color, 2, dim=1)
+            color = F.normalize(color, 2, dim=1)
+            return q_color, None, color, None
+        else:
+            color = x[:,:self.last_dim]
+            cls = x[:, self.last_dim:]
 
-        cls = self.layer5(cls)
-        cls = self.layer6(cls)
-        # cls = self.layer7(cls)
+            cls = self.layer5(cls)
+            cls = self.layer6(cls)
 
-        q_color = self.query_color(color)
-        q_cls = self.query_cls(cls)
+            q_color = self.query_color(color)
+            q_cls = self.query_cls(cls)
+            q_color = F.normalize(q_color,2,dim = 1)
+            q_cls = F.normalize(q_cls,2,dim = 1)
+            color = F.normalize(color,2,dim = 1)
+            cls = F.normalize(cls,2,dim = 1)
 
-        q_color = F.normalize(q_color,2,dim = 1)
-        q_cls = F.normalize(q_cls,2,dim = 1)
-        color = F.normalize(color,2,dim = 1)
-        cls = F.normalize(cls,2,dim = 1)
-
-        return q_color,q_cls,color,cls
+            return q_color, q_cls, color, cls
 
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
@@ -348,12 +349,16 @@ if __name__ == '__main__':
     from thop import profile
     from thop import clever_format
 
-    net = resnet18(model_size = 'S',first_kernal_size = 3)
-    # print(net)
+    net = resnet18(model_size = 'L',first_kernal_size = 7, feat_mode = 'color')
+    print(net.layer4[-1].conv2.weight.size())
+    grad_color = torch.mean(torch.abs(net.layer4[-1].conv2.weight[:net.last_dim]))
+    grad_dul = torch.mean(torch.abs(net.layer4[-1].conv2.weight[net.last_dim:]))
+    print('grad_color',grad_color)
+    print('grad_dul',grad_dul)
     x = torch.rand(1,3,256,256)
     color,cls,_,_ = net(x)
     print(color.size())
-    print(cls.size())
+
 
     flops, params = profile(net, inputs = (x,))
     flops, params = clever_format([flops, params], "%.3f")

@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import json
 
 from einops import rearrange, repeat
 from einops.layers.torch import Rearrange
@@ -25,15 +26,10 @@ from models.resnet_my import resnet18
 import matplotlib.pyplot as plt
 import argparse
 
-# src->crop涔嬮棿鐨勭洃鐫ｄ俊鍙蜂篃鐢ㄩ鑹?# helpers
-
 width = 256
 height = 256
 stride = 8
 patch_dim = stride * stride
-rCount = 5
-TEMP = 25
-
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
@@ -49,7 +45,7 @@ def l1_norm(input, axis=1):
 
 
 class ViT(nn.Module):
-    def __init__(self, cfg, ohem_range=[0.4, 1.0], is_thin=False, return_query = True):
+    def __init__(self, cfg, ohem_range=[0.4, 1.0], model_size = 'L', is_dul = False, is_neg = True, first_kernal_size = 3, TEMP = 25):
         super().__init__()
 
         self.cls_num = 16
@@ -57,9 +53,21 @@ class ViT(nn.Module):
         self.ohem_range = ohem_range
         print('net ohem range', ohem_range)
 
-        self.convlocal = resnet18(is_thin=is_thin)
         self.eye = None
-        self.return_query = return_query
+        self.is_dul = is_dul
+        self.is_neg = is_neg
+        self.TEMP = TEMP
+        feat_mode = 'color_dul'
+        if not is_dul:
+            feat_mode = 'color'
+
+        print('.....init network.')
+        print('is_dul', self.is_dul)
+        print('is_neg', self.is_neg)
+        print('TEMP', self.TEMP)
+        print('feat_mode',feat_mode)
+
+        self.convlocal = resnet18(model_size = model_size, first_kernal_size = first_kernal_size, feat_mode = feat_mode)
 
     def _align_my(self, x, tf):
         return F.grid_sample(x, tf, align_corners=False, mode="nearest", padding_mode='reflection')
@@ -281,8 +289,8 @@ class ViT(nn.Module):
     #
     #     return error_ref.mean(), error_t.mean(), error_map
 
-    def forward(self, frames1, frames2, affines, affine_src, labLst, w_mask_lst, rgbs1, rgbs2, frames1_d, frames2_d,
-                affines_d, affine_src_d):
+    def forward(self, frames1, frames2, affines, affine_src, labLst, w_mask_lst, frames1_d = None, frames2_d = None,
+                affines_d = None, affine_src_d = None):
         result = {}
         result['feat1'] = None
         result['feat2'] = None
@@ -290,8 +298,6 @@ class ViT(nn.Module):
         result['neg_loss'] = frames1.new_zeros(1)
         result['color_lst'] = None
         result['loss_color'] = frames1.new_zeros(1)
-        result['color_lstF'] = None
-        result['loss_colorF'] = frames1.new_zeros(1)
         result['loss_dul'] = frames1.new_zeros(1)
 
         B, T, _, _, _ = frames1.size()
@@ -301,50 +307,45 @@ class ViT(nn.Module):
         affine_src = affine_src.flatten(0, 1).cuda()
 
         # ==========================DUL================================
+        if self.is_dul \
+                and not frames1_d is None \
+                and not frames2_d is None \
+                and not affines_d is None \
+                and not affine_src_d is None:
+            images1_d = torch.cat((frames1_d, frames2_d[:, ::T]), 1)
+            images1_d = images1_d.flatten(0, 1).cuda()
+            images2_d = frames2_d[:, 1:].flatten(0, 1).cuda()
 
-        images1_d = torch.cat((frames1_d, frames2_d[:, ::T]), 1)
-        images1_d = images1_d.flatten(0, 1).cuda()
-        images2_d = frames2_d[:, 1:].flatten(0, 1).cuda()
+            affines_d = affines_d.flatten(0, 1).cuda()
+            affine_src_d = affine_src_d.flatten(0, 1).cuda()
 
-        affines_d = affines_d.flatten(0, 1).cuda()
-        affine_src_d = affine_src_d.flatten(0, 1).cuda()
 
-        if self.return_query:
             _, key1_cls, _, _ = self.convlocal(images1_d)
-        else:
-            _, _, _, key1_cls = self.convlocal(images1_d)
-        _, C, H, W = key1_cls.size()
+            _, C, H, W = key1_cls.size()
 
-        with torch.no_grad():
-            if self.return_query:
+            with torch.no_grad():
                 _, key2_cls, _, _ = self.convlocal(images2_d)
-            else:
-                _, _, _, key2_cls = self.convlocal(images2_d)
 
-        key1_cls, key2_cls = self.fetch_first(key1_cls, key2_cls, T)
+            key1_cls, key2_cls = self.fetch_first(key1_cls, key2_cls, T)
 
-        vals, pseudo, index = self._cluster_grid(key1_cls, key2_cls, affines_d, affine_src_d, T)
+            vals, pseudo, index = self._cluster_grid(key1_cls, key2_cls, affines_d, affine_src_d, T)
 
-        key1_aligned = self._align(key1_cls, affines_d)
-        key2_aligned = self._align(key2_cls, affine_src_d)
+            key1_aligned = self._align(key1_cls, affines_d)
+            key2_aligned = self._align(key2_cls, affine_src_d)
 
-        n_ref = self.cfg.MODEL.GRID_SIZE_REF  # N = 4
-        loss_cross_key = self._ref_loss(key1_aligned[::T], key2_aligned[::T], N=n_ref)
-        loss_temp = self._ce_loss(vals, pseudo, T)
-        loss_dul = 0.1 * loss_cross_key + loss_temp
-        result['loss_dul'] = loss_dul
+            n_ref = self.cfg.MODEL.GRID_SIZE_REF  # N = 4
+            loss_cross_key = self._ref_loss(key1_aligned[::T], key2_aligned[::T], N=n_ref)
+            loss_temp = self._ce_loss(vals, pseudo, T)
+            loss_dul = 0.1 * loss_cross_key + loss_temp
+            result['loss_dul'] = loss_dul
+
         # =============================================================
-        if self.return_query:
-            key1, _, _, _ = self.convlocal(img1)
-        else:
-            _, _, key1, _ = self.convlocal(img1)
+        key1, _, _, _ = self.convlocal(img1)
         _, C, H, W = key1.size()
 
         with torch.no_grad():
-            if self.return_query:
-                key2, _, _, _ = self.convlocal(img2)
-            else:
-                _, _, key2, _ = self.convlocal(img2)
+            key2, _, _, _ = self.convlocal(img2)
+
         key2 = key2.permute(0, 2, 3, 1).reshape(B, T, -1, C)  # B,T,HW,C
         key1 = key1.permute(0, 2, 3, 1).reshape(B, T, -1, C)
 
@@ -360,41 +361,54 @@ class ViT(nn.Module):
         color_loss_lst = []
         color_pred_lst = []
 
-        color_loss_lstF = []
-        color_pred_lstF = []
         HW = H * W
-        for i in range(rCount):
-            featp1 = torch.cat([key1[:, i], torch.flip(key1[:, i], [0])], 1)  # key : B,2HW,C
-            lab1 = torch.cat([labLst[:, i], torch.flip(labLst[:, i], [0])], 1)  # key : B,2HW,C
-            for j in range(rCount):
-                if i == j:
-                    continue
-                featp2 = torch.cat([key1[:, j], torch.flip(key1[:, j], [0])], 1)
-                att1 = torch.bmm(featp2[:, :HW], featp1.permute(0, 2, 1)) * TEMP
-                att1 = F.softmax(att1, dim=2)  # [B,HW,HW2]
+        if self.is_neg:
+            for i in range(self.cfg.DATASET.VIDEO_LEN):
+                featp1 = torch.cat([key1[:, i], torch.flip(key1[:, i], [0])], 1)  # key : B,2HW,C
+                lab1 = torch.cat([labLst[:, i], torch.flip(labLst[:, i], [0])], 1)  # key : B,2HW,C
+                for j in range(self.cfg.DATASET.VIDEO_LEN):
+                    if i == j:
+                        continue
+                    featp2 = torch.cat([key1[:, j], torch.flip(key1[:, j], [0])], 1)
+                    att1 = torch.bmm(featp2[:, :HW], featp1.permute(0, 2, 1)) *  self.TEMP
+                    att1 = F.softmax(att1, dim=2)  # [B,HW,HW2]
 
-                gt1 = labLst[:, j]
-                mask = w_mask_lst[:, j]
-                color1 = torch.bmm(att1, lab1)
-                for bid in range(B):
-                    loss_color_part = F.smooth_l1_loss(color1[bid] * mask[bid], gt1[bid] * mask[bid], beta=0.5)
-                    color_loss_lst.append(loss_color_part)
+                    gt1 = labLst[:, j]
+                    mask = w_mask_lst[:, j]
+                    color1 = torch.bmm(att1, lab1)
+                    for bid in range(B):
+                        loss_color_part = F.smooth_l1_loss(color1[bid] * mask[bid], gt1[bid] * mask[bid], beta=0.5)
+                        color_loss_lst.append(loss_color_part)
 
-                att2 = torch.bmm(featp1[:, :HW], featp2.permute(0, 2, 1)) * TEMP
-                att2 = F.softmax(att2, dim=2)
-                color2 = torch.bmm(att2, torch.cat([color1, torch.flip(color1, [0])], 1))
-                for bid in range(B):
-                    loss_color_part = F.smooth_l1_loss(color2[bid], lab1[bid][:HW], beta=0.5)
-                    color_loss_lstF.append(loss_color_part)
 
-                if i == 0:
-                    color1 = color1.view(-1, int(height // stride), int(width // stride),
-                                         stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
-                    color_pred_lst.append(color1)
+                    if i == 0:
+                        color1 = color1.view(-1, int(height // stride), int(width // stride),
+                                             stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
+                        color_pred_lst.append(color1)
 
-                    color2 = color2.view(-1, int(height // stride), int(width // stride),
-                                         stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
-                    color_pred_lstF.append(color2)
+        else:
+            for i in range(self.cfg.DATASET.VIDEO_LEN):
+                featp1 = key1[:, i]  # key : B,HW,C
+                lab1 = labLst[:, i]  # key : B,HW,C
+                for j in range(self.cfg.DATASET.VIDEO_LEN):
+                    if i == j:
+                        continue
+                    featp2 = key1[:, j]
+                    att1 = torch.bmm(featp2, featp1.permute(0, 2, 1)) *  self.TEMP
+                    att1 = F.softmax(att1, dim=2)  # [B,HW,HW]
+
+                    gt1 = labLst[:, j]
+                    mask = w_mask_lst[:, j]
+                    color1 = torch.bmm(att1, lab1)
+                    for bid in range(B):
+                        loss_color_part = F.smooth_l1_loss(color1[bid] * mask[bid], gt1[bid] * mask[bid], beta=0.5)
+                        color_loss_lst.append(loss_color_part)
+
+                    if i == 0:
+                        color1 = color1.view(-1, int(height // stride), int(width // stride),
+                                             stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
+                        color_pred_lst.append(color1)
+
 
         color_loss_lst.sort()
         loss_color = 0
@@ -403,14 +417,6 @@ class ViT(nn.Module):
         for i in range(idx1, idx2):
             loss_color += color_loss_lst[i]
         loss_color /= (idx2 - idx1)
-
-        color_loss_lstF.sort()
-        loss_colorF = 0
-        idx1 = int(len(color_loss_lstF) * self.ohem_range[0])
-        idx2 = int(len(color_loss_lstF) * self.ohem_range[1])
-        for i in range(idx1, idx2):
-            loss_colorF += color_loss_lstF[i]
-        loss_colorF /= (idx2 - idx1)
 
         neg_loss = self._neg_loss(key1[:, 0])
 
@@ -421,9 +427,6 @@ class ViT(nn.Module):
 
         result['color_lst'] = color_pred_lst
         result['loss_color'] = loss_color
-
-        result['color_lstF'] = color_pred_lstF
-        result['loss_colorF'] = loss_colorF
 
         return result
 
@@ -459,164 +462,215 @@ def init_random_seed(seed):
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
 
+def load_trai_config(path):
+    train_config = {
+        "exp":"benchmark",
+        "first_kernal_size":3,
+        "color_mode":"LAB",
+        "is_dul":True,
+        "is_aug":True,
+        "is_shadow":True,
+        "is_liquid":True,
+        "is_edge":True,
+        "is_neg":True,
+        "space_consistency": True,
+        "ohem_range":[0,1.0],
+        "model_size":"M",
+        "TEMP":25,
+        "is_cos_lr":True,
+        "video_len": 5
+    }
+    if not os.path.exists(path):
+        print('train config file {} not existed, exited.'.format(path))
+        exit()
+    with open(path) as fp:
+        jsonobj = json.load(fp)
+    for key in train_config:
+        if key in jsonobj:
+            train_config[key] = jsonobj[key]
+    return train_config
+
 
 if __name__ == '__main__':
     init_random_seed(777)
-    cfg_from_file(r'./configs/ytvos.yaml')
-    cfg.MODEL.FEATURE_DIM = 128
-    cfg.DATASET.VIDEO_LEN = 5
-    cfg.DATASET.RND_ZOOM_RANGE = [0.5, 1.]
 
     parser = argparse.ArgumentParser('')
-    parser.add_argument('--is_ohem', action='store_true')
-    parser.add_argument('--is_thin', action='store_true')
-
+    parser.add_argument('--exp', default='benchmark', type=str, help="实验信息")
+    parser.add_argument('--train_config', default='./configs/train_config_default.json', type=str, help="训练配置文件")
     args = parser.parse_args()
-    is_w_mask = True
-    is_cos_lr = True
-    is_coco = False
-    is_ohem = args.is_ohem
-    is_thin = args.is_thin
-    if is_ohem:
-        ohem_range = [0.4, 1.0]
-    else:
-        ohem_range = [0.0, 1.0]
-    print('is_w_mask', is_w_mask)
-    print('is_cos_lr', is_cos_lr)
-    print('is_coco', is_coco)
-    print('ohem_range', ohem_range)
-    print('is_thin', is_thin)
 
-    dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos',is_dul=False)
-    dataloader = data.DataLoader(dataset, batch_size=2, \
-                                 shuffle=True)
+    expid = args.exp
+    train_config_path = args.train_config
+    train_config = load_trai_config(train_config_path)
 
-    for i, batch in enumerate(dataloader):
-        # frames1, frames2, affine1,_,labs1, labs2 = batch
-        # frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
-        frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst = batch
-        assert frames1.size() == frames2.size(), "Frames shape mismatch"
-        frames1, frames2, affine1 = frames1, frames2, affine1
-        # We could simply do
-        #   images1 = frames1.flatten(0,1).cuda()
-        #   images2 = frames2.flatten(0,1).cuda()
-        # Instead we pull the reference frame from the 2nd view
-        # to the first view so that the regularising branch is
-        # always in evaluation mode to save the GPU memory
-        print(frames1.size(), affine1.size())
-        # print('affine_src',affine_src[0])
-        # print('affine_src_d',affine_src_d[0])
-        for i in range(5):
-            print('affine1[0]', affine1.size())
-            img3 = F.grid_sample(frames1[0], affine1[0], align_corners=False, mode="bilinear",padding_mode='reflection')
+    print('run exp',expid)
+    print('load train config:',train_config_path)
+    for key in train_config:
+        print('{} : {}'.format(key,train_config[key]))
 
-            # tf = F.affine_grid(affine1[0], size=frames1[0].size(), align_corners=False)
-            # img3 = F.grid_sample(frames1[0], tf, align_corners=False, mode="bilinear")
+    exp = train_config['exp']
+    first_kernal_size = train_config['first_kernal_size']
+    color_mode = train_config['color_mode']
+    is_dul = train_config['is_dul']
+    is_aug = train_config['is_aug']
+    is_shadow = train_config['is_shadow']
+    is_liquid = train_config['is_liquid']
+    is_edge = train_config['is_edge']
+    is_neg = train_config['is_neg']
+    space_consistency = train_config['space_consistency']
+    ohem_range = train_config['ohem_range']
+    model_size = train_config['model_size']
+    TEMP = train_config['TEMP']
+    is_cos_lr = train_config['is_cos_lr']
+    video_len = train_config['video_len']
 
-            img1 = frames1[0, i, :].permute(1, 2, 0).numpy()
-            img2 = frames2[0, i, :].permute(1, 2, 0).numpy()
-            img3 = img3[i, :].permute(1, 2, 0).numpy()
-            mean_ = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
-            std_ = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
+    cfg_from_file(r'./configs/ytvos.yaml')
+    cfg.MODEL.FEATURE_DIM = 128
+    cfg.DATASET.VIDEO_LEN = video_len
+    cfg.DATASET.RND_ZOOM_RANGE = [0.5, 1.]
 
-            img1 = np.array((img1 * std_ + mean_) * 255, dtype=np.uint8)
-            img2 = np.array((img2 * std_ + mean_) * 255, dtype=np.uint8)
-            img3 = np.array((img3 * std_ + mean_) * 255, dtype=np.uint8)
-            # img3 = cv2.resize(img3, (0, 0), fx=8, fy=8)
-            img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2BGR)
-            img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
-            img3 = cv2.cvtColor(img3, cv2.COLOR_RGB2BGR)
-            # img1[..., 0] = 255
-            # img2[..., 0] = 255
-            # img2[..., 1] = img2[..., 0]
-            # img2[..., 2] = img2[..., 0]
-            # img3[..., 0] = 255
-            print(img1.shape)
-            cv2.imshow('img1', img1)
-            cv2.imshow('img2', img2)
-            cv2.imshow('img3', img3)
-            plt.show()
-            cv2.waitKey()
-
-    net = ViT(cfg, ohem_range=ohem_range, is_thin=is_thin, return_query=False).cuda()
-    net.cuda()
-    print(net)
-
-    # x1 = torch.rand(2, rCount, 3, height, width).cuda()
-    # x2 = torch.rand(2, rCount, 3, height, width).cuda()
-    # x3 = torch.rand(2, rCount, height//8, width//8, 2).cuda()
-    # x4 = torch.rand(2, rCount, 3, height, width).cuda()
-    # x5 = torch.rand(2, rCount, 3, height, width).cuda()
-    # result = net(x1, x2, x3, x4, x5)
-    # feat1 = result['feat1']
-    # feat2 = result['feat2']
+    # dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
+    # dataloader = data.DataLoader(dataset, batch_size=2, \
+    #                              shuffle=True)
     #
-    # print(feat1.size())
-    # print(feat2.size())
+    # for i, batch in enumerate(dataloader):
+    #     # frames1, frames2, affine1,_,labs1, labs2 = batch
+    #     frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+    #     for tt in batch:
+    #         print(tt.size())
+    #     assert frames1.size() == frames2.size(), "Frames shape mismatch"
+    #     frames1, frames2, affine1 = frames1_d, frames2_d, affine1_d
+    #     # We could simply do
+    #     #   images1 = frames1.flatten(0,1).cuda()
+    #     #   images2 = frames2.flatten(0,1).cuda()
+    #     # Instead we pull the reference frame from the 2nd view
+    #     # to the first view so that the regularising branch is
+    #     # always in evaluation mode to save the GPU memory
+    #     print(frames1.size(), affine1.size())
+    #     # print('affine_src',affine_src[0])
+    #     # print('affine_src_d',affine_src_d[0])
+    #     for i in range(cfg.DATASET.VIDEO_LEN):
+    #         print('affine1[0]', affine1.size())
+    #         # img3 = F.grid_sample(frames1[0], affine1[0], align_corners=False, mode="bilinear",padding_mode='reflection')
+    #
+    #         tf = F.affine_grid(affine1[0], size=frames1[0].size(), align_corners=False)
+    #         img3 = F.grid_sample(frames1[0], tf, align_corners=False, mode="bilinear")
+    #
+    #         img1 = frames1[0, i, :].permute(1, 2, 0).numpy()
+    #         img2 = frames2[0, i, :].permute(1, 2, 0).numpy()
+    #         img3 = img3[i, :].permute(1, 2, 0).numpy()
+    #         mean_ = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 1, 3)
+    #         std_ = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 1, 3)
+    #
+    #         img1 = np.array((img1 * std_ + mean_) * 255, dtype=np.uint8)
+    #         img2 = np.array((img2 * std_ + mean_) * 255, dtype=np.uint8)
+    #         img3 = np.array((img3 * std_ + mean_) * 255, dtype=np.uint8)
+    #         # img3 = cv2.resize(img3, (0, 0), fx=8, fy=8)
+    #         img1 = cv2.cvtColor(img1,cv2.COLOR_RGB2BGR)
+    #         img2 = cv2.cvtColor(img2, cv2.COLOR_RGB2BGR)
+    #         img3 = cv2.cvtColor(img3, cv2.COLOR_RGB2BGR)
+    #         # img1[..., 0] = 255
+    #         # img2[..., 0] = 255
+    #         # img2[..., 1] = img2[..., 0]
+    #         # img2[..., 2] = img2[..., 0]
+    #         # img3[..., 0] = 255
+    #         print(img1.shape)
+    #         cv2.imshow('img1', img1)
+    #         cv2.imshow('img2', img2)
+    #         cv2.imshow('img3', img3)
+    #         plt.show()
+    #         cv2.waitKey()
+
+    net = ViT(cfg, ohem_range=ohem_range, model_size=model_size,is_dul=is_dul,is_neg = is_neg, first_kernal_size = first_kernal_size, TEMP = TEMP).cuda()
+    net.cuda()
+    print(net.convlocal.conv1)
+    print(net.convlocal.layer6)
 
     optimzer = optimzer.AdamW(net.parameters(), lr=0.0001, eps=1e-8, betas=[0.9, 0.95])
-    if is_coco:
-        dataset = dataloader_video_my_coco.DataVideo(cfg, 'train_ytvos')
-    else:
-        dataset = dataloader_video_my_dul.DataVideo(cfg, 'train_ytvos')
+    dataset = dataloader_video_my_coco.DataVideo(cfg, 'train_ytvos',is_aug=is_aug,is_shadow=is_shadow,is_dul=is_dul,is_liquid=is_liquid)
     dataloader = data.DataLoader(dataset, batch_size=8, shuffle=True, num_workers=12, drop_last=True)
     color_lst = torch.randint(0, 255, (net.cls_num, 3)).cuda()
-
     for epoch in range(1, 301):
         if is_cos_lr:
             adjust_learning_rate_cos(optimzer, epoch)
         else:
             adjust_learning_rate(optimzer, epoch)
-
+        grad_info_lst = []
         for i, batch in enumerate(dataloader):
-            frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+            if is_dul:
+                frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst, frames1_d, frames2_d, affine1_d, affine_src_d = batch
+                frames1_d = frames1_d.cuda().float()
+                frames2_d = frames2_d.cuda().float()
+                affine1_d = affine1_d.cuda().float()
+                affine_src_d = affine_src_d.cuda().float()
+            else:
+                frames1, frames2, affine1, affine_src, labs1, labs2, rgbs1, rgbs2, w_mask_lst = batch
+
             frames1 = frames1.cuda().float()
             frames2 = frames2.cuda().float()
-            rgbs1 = rgbs1.cuda().float()
-            rgbs2 = rgbs2.cuda().float()
             affine1 = affine1.cuda().float()
-            labs1 = labs1.cuda().float()
-            labs2 = labs2.cuda().float()
-
-            frames1_d = frames1_d.cuda().float()
-            frames2_d = frames2_d.cuda().float()
-            affine1_d = affine1_d.cuda().float()
-            affine_src_d = affine_src_d.cuda().float()
-
             w_mask_lst = w_mask_lst.cuda().float()
-            if not is_w_mask:
+            if color_mode == 'LAB':
+                labs1 = labs1.cuda().float()
+                labs2 = labs2.cuda().float()
+            elif color_mode == 'RGB':
+                labs1 = rgbs1.cuda().float()
+                labs2 = rgbs2.cuda().float()
+            elif color_mode == 'AB':
+                labs1 = labs1.cuda().float()
+                labs2 = labs2.cuda().float()
+                labs1[:,:,0] = 0
+                labs2[:,:,0] = 0
+            else:
+                print('illegal color mode {},only support LAB,RGB and AB.'.format(color_mode))
+                exit()
+
+            if not is_edge:
                 w_mask_lst = w_mask_lst * 0 + 1
             optimzer.zero_grad()
-            if True:
-                pred_result = net(frames1, frames2, affine1, affine_src, labs1, w_mask_lst, rgbs1, rgbs2, frames1_d,
-                                  frames2_d, affine1_d, affine_src_d)
-                feat1 = pred_result['feat1']
-                feat2 = pred_result['feat2']
-                loss_dul = pred_result['loss_dul']
 
-                loss_ce = pred_result['loss_ce']
-                loss_color = pred_result['loss_color']
-                color_lst = pred_result['color_lst']
-                loss_colorF = pred_result['loss_colorF']
-                color_lstF = pred_result['color_lstF']
-                neg_loss = pred_result['neg_loss']
-                loss = loss_ce + loss_color + loss_colorF + loss_dul * 0.1
-                # loss = loss_dul
-                # loss = loss_ce + loss_color + loss_colorF
+            if is_dul:
+                pred_result = net(frames1, frames2, affine1, affine_src, labs1, w_mask_lst,
+                                  frames1_d,frames2_d, affine1_d, affine_src_d)
+            else:
+                pred_result = net(frames1, frames2, affine1, affine_src, labs1, w_mask_lst)
+
+            loss_dul = pred_result['loss_dul']
+            loss_ce = pred_result['loss_ce']
+            loss_color = pred_result['loss_color']
+            color_lst = pred_result['color_lst']
+            neg_loss = pred_result['neg_loss']
+            if color_mode == 'AB':
+                loss_color *= 1.5
+            if space_consistency:
+                ce_weight = 1
+            else:
+                ce_weight = 0
+            if is_dul:
+                loss = loss_ce * ce_weight + loss_color + loss_dul * 0.01
+            else:
+                loss = loss_ce * ce_weight + loss_color
 
             loss.backward()
+            grad_color = torch.mean(torch.abs(net.convlocal.layer4[-1].conv2.weight.grad[:net.convlocal.last_dim]))
+            grad_dul = torch.mean(torch.abs(net.convlocal.layer4[-1].conv2.weight.grad[net.convlocal.last_dim:]))
             optimzer.step()
 
             timeStr = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
-            print('{:0>3d}-{:0>6d} {} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f}'.format(epoch, i, timeStr, loss.item(),
+            print(expid,'{:0>3d}-{:0>6d} {} {:.5f} {:.5f} {:.5f} {:.5f} {:.5f}'.format(epoch, i, timeStr, loss.item(),
                                                                                         loss_ce.item(),
                                                                                         loss_color.item(),
-                                                                                        loss_colorF.item(),
                                                                                         neg_loss.item(),
                                                                                         loss_dul.item(),
                                                                                         ))
+            grad_info_str = '{:.5f},{:.5f},{:.5f},{:.5f},{:.5f}\n'.format(loss_ce.item(),
+                                                                          loss_color.item(),
+                                                                          loss_dul.item(),
+                                                                          grad_color.item(),
+                                                                          grad_dul.item())
+            grad_info_lst.append(grad_info_str)
 
-            if i % 50 == 100:
+            if i % 50 == 0:
                 for idx in range(cfg.DATASET.VIDEO_LEN):
                     img1 = frames1[0, idx, :].permute(1, 2, 0).cpu().numpy()
                     img2 = frames2[0, idx, :].permute(1, 2, 0).cpu().numpy()
@@ -636,20 +690,19 @@ if __name__ == '__main__':
                     color1 = color_lst[idx][0].detach().cpu().numpy().transpose(1, 2, 0).reshape(height, width, 3) * 255
                     color1 = np.array(color1, dtype=np.uint8)
 
-                    color1F = color_lstF[idx][0].detach().cpu().numpy().transpose(1, 2, 0).reshape(height, width,
-                                                                                                   3) * 255
-                    color1F = np.array(color1F, dtype=np.uint8)
-
                     cv2.imwrite('./images/COCO_img{}_gt.jpg'.format(idx), gt1)
                     cv2.imwrite('./images/COCO_img{}_pred.jpg'.format(idx), color1)
-                    cv2.imwrite('./images/COCO_imgF{}_pred.jpg'.format(idx), color1F)
 
-        if epoch % 20 == 0:
-            if is_thin:
-                torch.save(net.convlocal.state_dict(),
-                           './snapshots/DULs8_512_My01_thin_{}.pkl'.format(epoch))
-            else:
-                torch.save(net.convlocal.state_dict(),
-                           './snapshots/DULs8_512_My01_{}.pkl'.format(epoch))
+        with open(r'./snapshots/{}.txt'.format(expid),'a') as fpw:
+            fpw.writelines(grad_info_lst)
+
+        if epoch % 20 == 0 or epoch > 290:
+            net_sd = net.convlocal.state_dict()
+            save_dict = {
+                'model': net_sd,
+                'train_config': train_config
+            }
+            torch.save(save_dict,
+                           './snapshots/{}_{:0>3d}_{}.pkl'.format(expid,epoch,model_size))
 
 
