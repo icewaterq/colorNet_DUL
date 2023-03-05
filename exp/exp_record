@@ -2,10 +2,13 @@ model size M
 color + dul  所有条件
 color 所有条件
 color 去除aug
+color 去除shadow
+color 去除liquid
 color 去除edge
-color video_len 2 3 4 5
+color rgb
+++color video_len 2 3 4 5
 color kernal size 7
-color 去除空间一致性
+++color 去除空间一致性
 dul
 
 model size S

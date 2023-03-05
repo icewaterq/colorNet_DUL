@@ -1,0 +1,17 @@
+{
+        "exp":"color_len5_L",
+        "first_kernal_size":3,
+        "color_mode":"LAB",
+        "is_dul":false,
+        "is_aug":true,
+        "is_shadow":true,
+        "is_liquid":true,
+        "is_edge":true,
+        "is_neg":true,
+        "space_consistency":false,
+        "ohem_range":[0,1.0],
+        "model_size":"L",
+        "TEMP":25,
+        "is_cos_lr":true,
+        "video_len": 5
+    }
