@@ -6,10 +6,27 @@ color_len3_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.701,0.672,0.813,0.180,0.730,0.855,0.254
 
+color_len4_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.707,0.677,0.812,0.175,0.736,0.861,0.242
+
 color_len5_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.709,0.679,0.815,0.175,0.740,0.862,0.243
 
+color_nosc_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.705,0.676,0.814,0.182,0.734,0.855,0.263
+
+color_noedge_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.694,0.664,0.791,0.181,0.723,0.850,0.256
+
+color_rgb_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.642,0.615,0.721,0.207,0.670,0.787,0.283
+
+-------------------------------------------------------------------
 color_dul_M  feat color
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.700,0.668,0.790,0.185,0.733,0.854,0.252
@@ -28,6 +45,12 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.742,0.718,0.839,0.206,0.765,0.887,0.264
 
+color_dul_S  feat merge
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.709,0.680,0.823,0.164,0.737,0.868,0.254
+
+
+--------------------------------------------------------------------
 color_dul_M_coco  feat merge
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.717,0.688,0.823,0.160,0.745,0.877,0.243

@@ -671,7 +671,7 @@ if __name__ == '__main__':
                                                                                         neg_loss.item(),
                                                                                         loss_dul.item(),
                                                                                         ))
-            grad_info_str = '{:.5f},{:.5f},{:.5f},{:.5f},{:.5f}\n'.format(loss_ce.item(),
+            grad_info_str = '{:.5f},{:.5f},{:.5f},{:.7f},{:.7f}\n'.format(loss_ce.item(),
                                                                           loss_color.item(),
                                                                           loss_dul.item(),
                                                                           grad_color.item(),
