@@ -26,6 +26,10 @@ color_rgb_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.642,0.615,0.721,0.207,0.670,0.787,0.283
 
+color_noaug_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.638,0.606,0.698,0.217,0.671,0.782,0.285
+
 -------------------------------------------------------------------
 color_dul_M  feat color
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
