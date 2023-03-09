@@ -1,0 +1,17 @@
+{
+        "exp":"color_dul_noliquid_M",
+        "first_kernal_size":3,
+        "color_mode":"LAB",
+        "is_dul":true,
+        "is_aug":true,
+        "is_shadow":true,
+        "is_liquid":false,
+        "is_edge":true,
+        "is_neg":true,
+        "space_consistency":true,
+        "ohem_range":[0,1.0],
+        "model_size":"M",
+        "TEMP":25,
+        "is_cos_lr":true,
+        "video_len": 5
+    }
