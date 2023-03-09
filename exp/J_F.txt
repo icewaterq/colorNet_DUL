@@ -30,6 +30,19 @@ color_noaug_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.638,0.606,0.698,0.217,0.671,0.782,0.285
 
+color_k7_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.704,0.675,0.800,0.186,0.733,0.862,0.262
+
+color_noneg_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.705,0.674,0.802,0.174,0.735,0.861,0.240
+
+color_noliquid_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.707,0.677,0.815,0.178,0.738,0.864,0.253
+
+
 -------------------------------------------------------------------
 color_dul_M  feat color
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay

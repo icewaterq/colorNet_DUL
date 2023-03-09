@@ -2,8 +2,8 @@ model size M
 +color + dul  所有条件
 +color 所有条件
 +color 去除aug
-color 去除shadow
-color 去除liquid
+++color 去除shadow
+++color 去除liquid
 ++color 去除neg
 +color 去除edge
 +color rgb
