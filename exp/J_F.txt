@@ -86,3 +86,7 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 color_dul_M_coco  feat merge
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.717,0.688,0.823,0.160,0.745,0.877,0.243
+
+color_dul_noliquid_M_coco  feat merge
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.713,0.685,0.816,0.172,0.740,0.864,0.258
