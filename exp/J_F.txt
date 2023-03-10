@@ -46,7 +46,9 @@ color_noshadow_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.693,0.661,0.779,0.199,0.725,0.844,0.267
 
-
+color_nolabclip_300_L
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay                                                                                                                                       │·····
+0.692,0.663,0.797,0.186,0.721,0.839,0.264
 -------------------------------------------------------------------
 color_dul_M  feat color
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
@@ -64,12 +66,9 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.742,0.718,0.839,0.206,0.765,0.887,0.264
 
-
 color_dul_S  feat merge
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.709,0.680,0.823,0.164,0.737,0.868,0.254
-
-
 
 color_dul_M_w100  feat color
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
@@ -81,7 +80,15 @@ color_dul_M_w100  feat merge
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.699,0.667,0.793,0.188,0.731,0.854,0.273
 
-
+color_dul_M_w10  feat color
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay                                                                                                                                       │·····
+0.698,0.665,0.786,0.201,0.731,0.855,0.269
+color_dul_M_w10  feat cls
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay                                                                                                                                       │·····
+0.692,0.663,0.796,0.183,0.722,0.855,0.275
+color_dul_M_w10  feat merge
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay                                                                                                                                       │·····
+0.709,0.677,0.810,0.182,0.741,0.869,0.261
 --------------------------------------------------------------------
 color_dul_M_coco  feat merge
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay

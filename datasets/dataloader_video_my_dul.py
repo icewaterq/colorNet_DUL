@@ -32,6 +32,55 @@ def dataclip(x):
     std = np.std(x)
     return np.clip(x,mean-std*3,mean+std*3)
 
+def shadow(img):
+    h, w,_ = img.shape
+    imgarr = np.array(img, dtype=np.float32)
+    imgarr = imgarr.swapaxes(1, 2).swapaxes(0, 1)
+
+    x1 = np.arange(0,1,1/w)
+    x2 = np.arange(0,1,1/h)
+
+    a1 = random.randint(1,4)
+    a2 = random.randint(1,4)
+    b1 = random.random()*np.pi*2
+    b2 = random.random()*np.pi*2
+    y1 = np.cos(a1*np.pi*x1+b1)+np.cos(a2*np.pi*x1+b2)
+
+    a1 = random.randint(1,4)
+    a2 = random.randint(1,4)
+    b1 = random.random()*np.pi*2
+    b2 = random.random()*np.pi*2
+    y2 = np.cos(a1*np.pi*x2+b1)+np.cos(a2*np.pi*x2+b2)
+
+    # plt.plot(x1,y1)
+    # y1[y1>0] = y1[y1>0]*0.5+1
+    # y1[y1<=0] = y1[y1<=0]*0.25+1
+    # y2[y2>0] = y2[y2>0]*0.5+1
+    # y2[y2<=0] = y2[y2<=0]*0.25+1
+
+    # print(x1.shape)
+    # print(y1.shape)
+    # plt.plot(x1,y1)
+    # plt.show()
+
+    grad1 = np.array([y1 for i in range(h)])
+    grad2 = np.array([y2 for i in range(w)]).T
+    grad = (grad1 + grad2)/2
+    grad = (grad - np.min(grad)) / (np.max(grad) - np.min(grad))
+    grad_vis = -grad.copy()
+    print(np.min(grad),np.max(grad))
+    grad[grad>=0.5] = grad[grad>=0.5]*2
+    grad[grad<0.5] = grad[grad<0.5]+0.5
+    print(np.min(grad),np.max(grad))
+    imgarr = (imgarr - np.min(imgarr)) / (np.max(imgarr) - np.min(imgarr) )
+
+    imgarr[0] = imgarr[0] ** grad
+    imgarr[1] = imgarr[1] ** grad
+    imgarr[2] = imgarr[2] ** grad
+
+    imgarr = imgarr * 255
+    imgarr = imgarr.swapaxes(0, 1).swapaxes(1, 2).astype(np.uint8)
+    return imgarr,grad_vis
 
 
 class GaussianBlur(object):
@@ -107,37 +156,6 @@ def addFakeShadow(img, n=2):
         else:
             img[mask > 127] = imggamma[mask > 127]
     return img
-
-def shadow(img):
-    h, w, _ = img.shape
-    imgarr = np.array(img, dtype=np.float32)
-    imgarr = imgarr.swapaxes(1, 2).swapaxes(0, 1)
-
-    if random.random() < 0.5:
-        tmp = np.linspace(0, np.pi * (random.random() * 3 + 0.5), num=w) + random.random() * np.pi * 2
-        tmp = np.sin(tmp) * 0.35 + 0.85
-        tmp = np.clip(tmp, 0.5, 1.2)
-        grad = np.array([tmp for i in range(h)])
-    else:
-        tmp = np.linspace(0, np.pi * (random.random() * 3 + 0.5), num=h) + random.random() * np.pi * 2
-        tmp = np.sin(tmp) * 0.35 + 0.85
-        tmp = np.clip(tmp, 0.5, 1.2)
-        grad = np.array([tmp for i in range(w)])
-        grad = grad.swapaxes(0, 1)
-
-    imgarr = (imgarr - np.min(imgarr)) / np.max(imgarr)
-
-    offset = np.mean(imgarr) - 0.5
-    grad = grad + offset
-    grad = np.clip(grad, 0.5, 1.2)
-
-    imgarr[0] = imgarr[0] ** grad
-    imgarr[1] = imgarr[1] ** grad
-    imgarr[2] = imgarr[2] ** grad
-
-    imgarr = imgarr * 255
-    imgarr = imgarr.swapaxes(0, 1).swapaxes(1, 2).astype(np.uint8)
-    return imgarr
 
 def randomMask(img,stride,p):
     h,w,c = img.shape
