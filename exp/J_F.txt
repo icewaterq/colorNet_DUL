@@ -13,6 +13,9 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 color_len5_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.709,0.679,0.815,0.175,0.740,0.862,0.243
+1152x640
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.733,0.705,0.831,0.171,0.762,0.869,0.228
 
 color_nosc_300_L
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
