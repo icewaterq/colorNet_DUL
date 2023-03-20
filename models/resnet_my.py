@@ -349,14 +349,14 @@ if __name__ == '__main__':
     from thop import profile
     from thop import clever_format
 
-    net = resnet18(model_size = 'S',first_kernal_size = 3, feat_mode = 'color_dul')
+    net = resnet18(model_size = 'M',first_kernal_size = 3, feat_mode = 'color_dul')
     print(net.layer4[-1].conv2.weight.size())
     grad_color = torch.mean(torch.abs(net.layer4[-1].conv2.weight[:net.last_dim]))
     grad_dul = torch.mean(torch.abs(net.layer4[-1].conv2.weight[net.last_dim:]))
     print('grad_color',grad_color)
     print('grad_dul',grad_dul)
     print(net)
-    x = torch.rand(1,3,256,256)
+    x = torch.rand(1,3,480,864)
     color,cls,_,_ = net(x)
     print(color.size())
 
