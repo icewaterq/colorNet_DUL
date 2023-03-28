@@ -260,3 +260,9 @@ class MaskedAttention(nn.Module):
         mask = self.masks[sid]
 
         return x * mask[0]
+
+if __name__=='__main__':
+    restrict = MaskedAttention(12, flat=False)
+    D = restrict.mask(96, 48)[None]
+    D = D.flatten(-4, -3).flatten(-2)
+    print(D.shape)

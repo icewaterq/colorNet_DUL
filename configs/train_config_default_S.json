@@ -9,6 +9,7 @@
         "is_edge":true,
         "is_neg":true,
         "space_consistency":true,
+        "is_labclip": true,
         "ohem_range":[0,1.0],
         "model_size":"S",
         "TEMP":25,

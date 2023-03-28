@@ -318,7 +318,7 @@ def findEdge2(img,lenThresh,stride,scale = 1):
 
 class DataVideo(DLBase):
 
-    def __init__(self, cfg, split, val=False,is_aug = True,is_shadow = True,is_dul = True, is_liquid = True):
+    def __init__(self, cfg, split, val=False,is_aug = True,is_shadow = True,is_dul = True, is_liquid = True, is_labclip = True):
         super(DataVideo, self).__init__()
 
         self.cfg = cfg
@@ -328,6 +328,7 @@ class DataVideo(DLBase):
         self.is_shadow = is_shadow
         self.is_dul = is_dul
         self.is_liquid = is_liquid
+        self.is_labclip = is_labclip
         print('init dataset.....')
         print('is_aug',self.is_aug)
         print('is_shadow', self.is_shadow)
@@ -664,8 +665,9 @@ class DataVideo(DLBase):
         rgbs1 = np.array(rgbs1, dtype=np.float32).transpose(0, 3, 1, 2) / 255
         rgbs2 = np.array(rgbs2, dtype=np.float32).transpose(0, 3, 1, 2) / 255
 
-        labs1[:,1:] = dataclip(labs1[:,1:])
-        labs2[:,1:] = dataclip(labs2[:,1:])
+        if self.is_labclip:
+            labs1[:,1:] = dataclip(labs1[:,1:])
+            labs2[:,1:] = dataclip(labs2[:,1:])
         labs1[:,1:] = datanorm(labs1[:,1:])
         labs2[:,1:] = datanorm(labs2[:,1:])
 

@@ -474,6 +474,7 @@ def load_trai_config(path):
         "is_edge":True,
         "is_neg":True,
         "space_consistency": True,
+        "is_labclip": True,
         "ohem_range":[0,1.0],
         "model_size":"M",
         "TEMP":25,
@@ -523,6 +524,7 @@ if __name__ == '__main__':
     is_edge = train_config['is_edge']
     is_neg = train_config['is_neg']
     space_consistency = train_config['space_consistency']
+    is_labclip = train_config['is_labclip']
     ohem_range = train_config['ohem_range']
     model_size = train_config['model_size']
     TEMP = train_config['TEMP']
