@@ -414,8 +414,8 @@ class DataVideo(DLBase):
             AddRandomMask(0.5)
         ])
 
-        self.cocodir = r'/root/autodl-tmp/dataset/COCO/train2017'
-        # self.cocodir = r'E:\public_dataset\detect\COCO\val2017'
+        # self.cocodir = r'/root/autodl-tmp/dataset/COCO/train2017'
+        self.cocodir = os.path.join(cfg.DATASET.ROOT,'COCO','train2017')
         self.coco_flist = os.listdir(self.cocodir)
 
     def _init_augm(self, cfg):
