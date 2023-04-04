@@ -348,14 +348,15 @@ class ViT(nn.Module):
 
         key2 = key2.permute(0, 2, 3, 1).reshape(B, T, -1, C)  # B,T,HW,C
         key1 = key1.permute(0, 2, 3, 1).reshape(B, T, -1, C)
-
+        #Lab图像
         labLst = labLst.view(-1, 3, int(height // stride), int(stride),
                              int(width // stride), int(stride)).permute(0, 2, 4, 3, 5, 1).reshape(B, T, H * W,
-                                                                                                  patch_dim * 3)
+                                                                                                 patch_dim * 3)
+        # 边缘权重图
         w_mask_lst = w_mask_lst.view(-1, 3, int(height // stride), int(stride),
                                      int(width // stride), int(stride)).permute(0, 2, 4, 3, 5, 1).reshape(B, T, H * W,
                                                                                                           patch_dim * 3)
-
+        #空间一致性Loss
         loss_ce = self._ce_loss2(key1, key2, affines, T, H, W)
 
         color_loss_lst = []
@@ -364,6 +365,7 @@ class ViT(nn.Module):
         HW = H * W
         if self.is_neg:
             for i in range(self.cfg.DATASET.VIDEO_LEN):
+                #翻转batch顺序，拼接负样本
                 featp1 = torch.cat([key1[:, i], torch.flip(key1[:, i], [0])], 1)  # key : B,2HW,C
                 lab1 = torch.cat([labLst[:, i], torch.flip(labLst[:, i], [0])], 1)  # key : B,2HW,C
                 for j in range(self.cfg.DATASET.VIDEO_LEN):
@@ -403,13 +405,13 @@ class ViT(nn.Module):
                     for bid in range(B):
                         loss_color_part = F.smooth_l1_loss(color1[bid] * mask[bid], gt1[bid] * mask[bid], beta=0.5)
                         color_loss_lst.append(loss_color_part)
-
+                    #图像重构结果
                     if i == 0:
                         color1 = color1.view(-1, int(height // stride), int(width // stride),
                                              stride, stride, 3).permute(0, 5, 1, 3, 2, 4).reshape(B, 3, height, width)
                         color_pred_lst.append(color1)
 
-
+        #loss排序，只有指定区间内的loss进行计算并回传梯度，实际使用时用的[0,1.0]计算所有loss
         color_loss_lst.sort()
         loss_color = 0
         idx1 = int(len(color_loss_lst) * self.ohem_range[0])
@@ -417,7 +419,7 @@ class ViT(nn.Module):
         for i in range(idx1, idx2):
             loss_color += color_loss_lst[i]
         loss_color /= (idx2 - idx1)
-
+        #看batch之间的相似度，实际没有使用，仅观察是否下降
         neg_loss = self._neg_loss(key1[:, 0])
 
         result['feat1'] = key1
@@ -438,7 +440,7 @@ def adjust_learning_rate(optimizer, epoch):
             param_group['lr'] = param_group['lr'] * 0.5
             print('changed lr:{}'.format(param_group['lr']))
 
-
+#学习率warmup和余弦衰减
 def adjust_learning_rate_cos(optimizer, epoch):
     epoch = min(260, epoch)
     epochs = 300
@@ -650,6 +652,7 @@ if __name__ == '__main__':
             loss_color = pred_result['loss_color']
             color_lst = pred_result['color_lst']
             neg_loss = pred_result['neg_loss']
+            #由于直接将L通道置0，所以计算平均loss会比原先小，乘1.5平衡
             if color_mode == 'AB':
                 loss_color *= 1.5
             if space_consistency:

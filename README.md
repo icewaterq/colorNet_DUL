@@ -40,22 +40,22 @@ python trainColorNetDUL_benchmark.py --exp 实验ID --train_config 配置文件�
 
 ```
 {
-    "exp":"benchmark_M",                实验ID
-    "first_kernal_size":3,                     第一层卷积的卷积核尺寸
-    "color_mode":"LAB",                   色彩空间模式，可选RGB和LAB
-    "is_dul":true,                                是否引入DUL方法
-    "is_aug":true,                               是否使用常规数据增强方法
-    "is_shadow":true,                         是否生成阴影
-    "is_liquid":true,                            是否使用随机图像扭曲
-    "is_edge":true,                             是否使用边缘权重图
-    "is_neg":true,                               是否使用负样本
-    "space_consistency":true,           是否使用空间一致性
-    "is_labclip": true,                          是否使用Lab空间数值截断
-    "ohem_range":[0,1.0],                  Loss计算时选取的百分比
-    "model_size":"M",                        模型规格
-    "TEMP":25,                                   图像重构时求特征距离的缩放系数┏
-    "is_cos_lr":true,                             学习率是否使用warmup和余弦衰减
-    "video_len": 5                               切片大小
+    "exp":"benchmark_M",                    实验ID
+    "first_kernal_size":3,                  第一层卷积的卷积核尺寸
+    "color_mode":"LAB",                     色彩空间模式，可选RGB和LAB
+    "is_dul":true,                          是否引入DUL方法
+    "is_aug":true,                          是否使用常规数据增强方法
+    "is_shadow":true,                       是否生成阴影
+    "is_liquid":true,                       是否使用随机图像扭曲
+    "is_edge":true,                         是否使用边缘权重图
+    "is_neg":true,                          是否使用负样本
+    "space_consistency":true,               是否使用空间一致性
+    "is_labclip": true,                     是否使用Lab空间数值截断
+    "ohem_range":[0,1.0],                   Loss计算时选取的百分比
+    "model_size":"M",                       模型规格
+    "TEMP":25,                              图像重构时求特征距离的缩放系数┏
+    "is_cos_lr":true,                       学习率是否使用warmup和余弦衰减
+    "video_len": 5                          切片大小
 }
 ```
 
@@ -63,6 +63,7 @@ python trainColorNetDUL_benchmark.py --exp 实验ID --train_config 配置文件�
 ### 测试
 #### 预测
 特征类型分为color、cls、merge三种，color：局部特征；cls：全局特征；merge：融合特征。预测后的结果将保存在./output目录下。
+
 **注：只有在配置文件中is_dul为true时才能使用全局特征和融合特征。**
 ```
 python infer_vos_dul.py   --cfg configs/ytvos.yaml --exp 0001 --run final --infer-list filelists/val_davis2017_test --mask-output-dir ./output --seed 0 --set TEST.KEY 特征类型 --resume 模型路径
@@ -77,6 +78,6 @@ python evaluation_method.py --task semi-supervised --davis_path DAVIS数据集�
 
 | 结构 | 参数量 | FLOPs(256x256) | J&F(局部\全局\融合)      | 下载 |
 | --- | --- | --- |--------------------| --- |
-| Model-L(仅局部) | 11.5M | 12.3G | 70.9/ - / -        |  |
-| Model-M | 14.6M | 15.2G | 70.0/ 70.6 / 72.1  |  |
-| Model-S | 4.0M | 4.3G | 68.1 / 69.7 / 70.9 |  |
+| Model-L(仅局部) | 11.5M | 12.3G | 70.9 / - / -        | [download](https://1drv.ms/u/s!AjYPLlUeVYc7nOo--DrUio6S5Pojyw?e=MNaS2i) |
+| Model-M | 14.6M | 15.2G | 70.0 / 70.6 / 72.1  | [download](https://1drv.ms/u/s!AjYPLlUeVYc7nOpA_gjifo3YeHS53Q?e=P62mCF) |
+| Model-S | 4.0M | 4.3G | 68.1 / 69.7 / 70.9 | [download](https://1drv.ms/u/s!AjYPLlUeVYc7nOo_3s_7J7ZmAJTeKQ?e=5nr3dq) |

@@ -241,6 +241,29 @@ class MaskedAttention(nn.Module):
 
         return D
 
+    def make_R(self, H, W):
+        if self.flat:
+            H = int(H ** 0.5)
+            W = int(W ** 0.5)
+
+        gx, gy = torch.meshgrid(torch.arange(0, H), torch.arange(0, W))
+        D = ((gx[None, None, :, :] - gx[:, :, None, None]) ** 2 + (
+                    gy[None, None, :, :] - gy[:, :, None, None]) ** 2).float() ** 0.5
+
+        # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 23, 26, 30, 34, 39]
+        RLst = [30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 12]
+        mask20 = []
+        for tR in RLst:
+            mask20.append((D < tR)[None].float())
+        D = torch.cat(mask20, 0)
+        # D = (D < self.radius)[None].float()
+        if self.flat:
+            D = self.flatten(D)
+        self.masks['%s-%s' % (H, W)] = D
+
+        return D
+
+
     def flatten(self, D):
         return torch.flatten(torch.flatten(D, 1, 2), -2, -1)
 
