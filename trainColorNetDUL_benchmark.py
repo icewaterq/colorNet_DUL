@@ -532,6 +532,7 @@ if __name__ == '__main__':
     TEMP = train_config['TEMP']
     is_cos_lr = train_config['is_cos_lr']
     video_len = train_config['video_len']
+    dul_loss_weight = 0.01
 
     cfg_from_file(r'./configs/ytvos.yaml')
     cfg.MODEL.FEATURE_DIM = 128
@@ -660,7 +661,7 @@ if __name__ == '__main__':
             else:
                 ce_weight = 0
             if is_dul:
-                loss = loss_ce * ce_weight + loss_color + loss_dul * 0.01
+                loss = loss_ce * ce_weight + loss_color + loss_dul * dul_loss_weight
             else:
                 loss = loss_ce * ce_weight + loss_color
 

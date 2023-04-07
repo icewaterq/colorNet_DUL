@@ -19,24 +19,24 @@ import datasets.daugm_video_my as tf_my
 import cv2
 from torchvision import transforms
 import torch.nn.functional as F
-
+#归一化
 def datanorm(x):
     minv = np.min(x)
     maxv = np.max(x)
     if maxv - minv < 1 / 256:
         return x
     return (x - minv) / (maxv - minv)
-
+#截断至正负3倍方差以内
 def dataclip(x):
     mean = np.mean(x)
     std = np.std(x)
     return np.clip(x,mean-std*3,mean+std*3)
-
+# #生成连续gamma值的阴影
 def shadow(img):
     h, w,_ = img.shape
     imgarr = np.array(img, dtype=np.float32)
     imgarr = imgarr.swapaxes(1, 2).swapaxes(0, 1)
-
+    #坐标转换至0-1
     x1 = np.arange(0,1,1/w)
     x2 = np.arange(0,1,1/h)
 
@@ -68,10 +68,10 @@ def shadow(img):
     grad = (grad1 + grad2)/2
     grad = (grad - np.min(grad)) / (np.max(grad) - np.min(grad))
     grad_vis = -grad.copy()
-    print(np.min(grad),np.max(grad))
+    # print(np.min(grad),np.max(grad))
     grad[grad>=0.5] = grad[grad>=0.5]*2
     grad[grad<0.5] = grad[grad<0.5]+0.5
-    print(np.min(grad),np.max(grad))
+    # print(np.min(grad),np.max(grad))
     imgarr = (imgarr - np.min(imgarr)) / (np.max(imgarr) - np.min(imgarr) )
 
     imgarr[0] = imgarr[0] ** grad
@@ -116,7 +116,7 @@ class Solarization(object):
             return ImageOps.solarize(img)
         else:
             return img
-
+#生成离散gamma值的阴影
 def addFakeShadow(img, n=2):
     h, w, _ = img.shape
     sizew = int(w * 0.5)
@@ -124,6 +124,7 @@ def addFakeShadow(img, n=2):
     for _ in range(n):
         imggamma = img.astype(np.float32)
         mask = np.zeros(img.shape)
+        #随机生成四个点
         x1 = random.randint(0, w)
         y1 = random.randint(0, h)
         x2 = np.clip(random.randint(x1 - sizew, x1 + sizew), 1, w - 1)
@@ -142,11 +143,11 @@ def addFakeShadow(img, n=2):
         if (np.max(imggamma) > 0.01):
             imggamma = (imggamma - np.min(imggamma)) / np.max(imggamma)
         if random.random() < 0.5:
-            gamma = 0.5 + 0.5 * random.random()
+            gamma = 0.5 + 0.5 * random.random()  #0.5-1之间的gamma变换
         else:
-            gamma = 1 + random.random() * 0.5
+            gamma = 1 + random.random() * 0.5    #1-1.5之间的gamma变换
         imggamma = ((imggamma ** gamma) * 255).astype(np.uint8)
-
+        #高斯模糊让阴影边缘更加自然
         if random.random() < 0.8:
             gaussSize = random.choice([3, 5, 7, 9])
             gaussRadius = random.randint(7, 12)
@@ -185,7 +186,10 @@ class AddFakeShadow(object):
     def __call__(self, img):
         if random.random() < self.p:
             img = np.asarray(img).astype(np.float32)
-            img = addFakeShadow(img,random.randint(3,6))
+            if random.random()<0.75:
+                img = addFakeShadow(img,random.randint(3,6))
+            else:
+                img,_ = shadow(img)
             img = img.astype(np.uint8)
             img = Image.fromarray(img)
             return img
@@ -216,22 +220,25 @@ class AddRandomMask(object):
 mX,mY = np.meshgrid(np.arange(0, 256), np.arange(0, 256))
 mX = mX.astype(np.float32)
 mY = mY.astype(np.float32)
-
+#生成重映射矩阵
 def generateMap(w,h):
     mapX,mapY = np.meshgrid(np.arange(0, w), np.arange(0, h))
     mapX = mapX.astype(np.float32)
     mapY = mapY.astype(np.float32)
+    #随机生成八个点
     markPoints = [[random.randint(-int(0.2 * w), int(1.2 * w)), random.randint(-int(0.2 * h), int(1.2 * h))] for _ in range(8)]
     for mp in markPoints:
         cx, cy = mp
+        #每一个点随机生成一个方向向量
         ox, oy = random.randint(12, 24)*random.choice([1,-1]), random.randint(12,24)*random.choice([1,-1])
         dis = ((mX - cx) ** 2 + (mY - cy) ** 2) ** 0.5
-        ratio = np.clip(1 - dis / 100, 0, 1)
+        ratio = np.clip(1 - dis / 100, 0, 1)#距离越远权重越小
         mapX += ox * ratio
         mapY += oy * ratio
-
+    #用于做图像的重映射
     grid = np.array([mapX / w * 2 - 1, mapY / h * 2 - 1]).swapaxes(0, 1).swapaxes(1, 2)
     grid = torch.Tensor(grid)
+    #用于做特征的重映射，尺寸为图像的1/8
     grid_8 = np.array([cv2.resize(mapX,(0,0),fx = 1/8,fy = 1/8) / w * 2 - 1, cv2.resize(mapY,(0,0),fx = 1/8,fy = 1/8) / h * 2 - 1]).swapaxes(0, 1).swapaxes(1, 2)
     grid_8 = torch.Tensor(grid_8)
     return mapX,mapY,grid,grid_8
@@ -247,7 +254,7 @@ def findEdge2(img,lenThresh,stride,scale = 1):
     mask[:,:int(w * 0.1)] = 0
     mask[:,int(w * 0.9):] = 0
     mask2 = np.zeros((h,w,3),dtype=np.uint8)
-
+    #图像的每一行从左到右遍历，如果边缘点之间距离大于阈值则认为是边缘候选点，并在边缘权重图上以半径r=4绘制
     for i in range(0,w,stride):
         length = 0
         lastV = 0
@@ -262,7 +269,7 @@ def findEdge2(img,lenThresh,stride,scale = 1):
                     mask2[j-4:j+4, i-4:i+4] = 255
                 length = 0
             lastV = curV
-
+    # 图像的每一行从右到左遍历
     for i in range(0,w,stride):
         length = 0
         lastV = 0
@@ -279,7 +286,7 @@ def findEdge2(img,lenThresh,stride,scale = 1):
                 length = 0
             lastV = curV
 
-
+    # 图像的每一列从上到下遍历
     for j in range(0,h,stride):
         length = 0
         lastV = 0
@@ -294,7 +301,7 @@ def findEdge2(img,lenThresh,stride,scale = 1):
                     mask2[j-4:j+4, i-4:i+4] = 255
                 length = 0
             lastV = curV
-
+    # 图像的每一列从下到上遍历
     for j in range(0,h,stride):
         length = 0
         lastV = 0
@@ -422,8 +429,8 @@ class DataVideo(DLBase):
 
         if is_shadow:
             print('add shadow aug.')
-            aug_lst_L.insert(0, AddFakeShadow(0.6))
-            aug_lst_S.insert(0, AddFakeShadow(0.6))
+            aug_lst_L.insert(0, AddFakeShadow(0.8))
+            aug_lst_S.insert(0, AddFakeShadow(0.8))
 
         self.color_jitter_l = transforms.Compose(aug_lst_L)
         self.color_jitter_s = transforms.Compose(aug_lst_S)
@@ -596,7 +603,7 @@ class DataVideo(DLBase):
         return affine_inv
 
     def __getitem__(self, index):
-        isTrans = True
+        isTrans = True  #空间一致性的时候使用随即扭曲，并生成对应的重映射矩阵
         if random.random() < 0.5:
             isTrans = False
         if not self.is_liquid:
@@ -638,7 +645,6 @@ class DataVideo(DLBase):
                 img = img.transpose(Image.FLIP_TOP_BOTTOM)
             images.append(img)
 
-
         #===================================my=================================
         frames, valid = self.tf_pre_my(images)
         frames1, valid1 = frames[:], valid[:]
@@ -665,6 +671,7 @@ class DataVideo(DLBase):
         rgbs1 = np.array(rgbs1, dtype=np.float32).transpose(0, 3, 1, 2) / 255
         rgbs2 = np.array(rgbs2, dtype=np.float32).transpose(0, 3, 1, 2) / 255
 
+        #dataclip和datanorm都在切片中说有图像上一起做。
         if self.is_labclip:
             labs1[:,1:] = dataclip(labs1[:,1:])
             labs2[:,1:] = dataclip(labs2[:,1:])
@@ -707,7 +714,7 @@ class DataVideo(DLBase):
 
         aff_reg_inv = self._get_affine_inv(aff_reg, affine_params1)
 
-        aff_reg = aff_main # identity affine2_inv
+        aff_reg = aff_main
         aff_main = aff_reg_inv
 
         frames1 = torch.stack(frames1, 0)
