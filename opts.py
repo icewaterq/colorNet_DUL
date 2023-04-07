@@ -22,7 +22,7 @@ def add_global_arguments(parser):
                         help="Where to save log files of the model.")
     parser.add_argument("--exp", type=str, default="main",
                         help="ID of the experiment (multiple runs)")
-    parser.add_argument("--run", type=str, help="ID of the run")
+    parser.add_argument("--run", type=str, default="0001", help="ID of the run")
     parser.add_argument('--workers', type=int, default=8,
                         metavar='N', help='dataloader threads')
     parser.add_argument('--seed', default=64, type=int, help='seed for initializing training. ')
