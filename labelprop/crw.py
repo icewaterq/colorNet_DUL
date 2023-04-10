@@ -252,6 +252,7 @@ class MaskedAttention(nn.Module):
 
         # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 23, 26, 30, 34, 39]
         RLst = [30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 12]
+
         mask20 = []
         for tR in RLst:
             mask20.append((D < tR)[None].float())
