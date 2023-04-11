@@ -204,20 +204,43 @@ color_len2_merge_L.pkl
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.697,0.668,0.786,0.182,0.727,0.859,0.252
 
-================================ R = 30 ===================================
+================================ R = 25 ===================================
 color_dul_merge_M.pkl
 color
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
-0.702,0.670,0.795,0.171,0.733,0.859,0.238
+0.704,0.673,0.796,0.172,0.736,0.858,0.237
 cls
-J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
-0.702,0.675,0.814,0.157,0.729,0.861,0.253
+
 merge
-J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
-0.725,0.696,0.844,0.145,0.754,0.878,0.227
+
 1152x640
+
+
+
+color_dul_merge_S.pkl
+merge
+
+
+color_len5_merge_L
+R = 40
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
-0.746,0.719,0.854,0.155,0.773,0.885,0.213
-
-
+0.703,0.675,0.805,0.169,0.731,0.854,0.241
+R = 35
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.706,0.678,0.810,0.167,0.735,0.857,0.235
+R = 30
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.708,0.678,0.813,0.167,0.737,0.858,0.233
+R = 25
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.711,0.680,0.815,0.169,0.741,0.860,0.233
+R = 20
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.711,0.681,0.814,0.168,0.742,0.862,0.234
+R = 15
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.710,0.679,0.813,0.174,0.740,0.864,0.245
+R = 2000
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.698,0.671,0.800,0.170,0.724,0.848,0.242
 
