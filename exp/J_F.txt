@@ -128,12 +128,33 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 1152x640
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.740,0.711,0.843,0.172,0.768,0.881,0.231
+R = 15
+ J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
+ 0.722981 0.693089  0.832927 0.154914 0.752874   0.87417 0.235261
+
 R = 20
 J&F-Mean   J-Mean  J-Recall  J-Decay  F-Mean  F-Recall  F-Decay
  0.724864 0.694328  0.834709 0.152374  0.7554  0.876034  0.23008
+ R = 25
+ J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
+ 0.725112 0.695137  0.841201 0.149077 0.755088  0.875012 0.228531
+ R=30
+  J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
+  0.72516 0.696226  0.843563 0.145226 0.754094  0.878449 0.227161
+ R = 35
+  J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
+ 0.724488 0.695949  0.845407 0.146432 0.753027  0.879538 0.230945
+ R = 40
+  J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
+ 0.722945 0.694621  0.843146 0.148558 0.751268  0.880182 0.233243
 R = 2000
 J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
  0.719026 0.691424  0.838743 0.151971 0.746628  0.881396 0.238609
+
+[30, 29, 28, 28, 27, 27, 26, 26, 25, 25, 24, 24, 23, 23, 22, 22, 21, 21, 20, 20]
+J&F-Mean   J-Mean  J-Recall  J-Decay   F-Mean  F-Recall  F-Decay
+ 0.724565 0.694362  0.839109 0.151236 0.754768  0.875648 0.228891
+
 
 color_dul_merge_S.pkl
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
@@ -182,5 +203,21 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 color_len2_merge_L.pkl
 J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 0.697,0.668,0.786,0.182,0.727,0.859,0.252
+
+================================ R = 30 ===================================
+color_dul_merge_M.pkl
+color
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.702,0.670,0.795,0.171,0.733,0.859,0.238
+cls
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.702,0.675,0.814,0.157,0.729,0.861,0.253
+merge
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.725,0.696,0.844,0.145,0.754,0.878,0.227
+1152x640
+J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
+0.746,0.719,0.854,0.155,0.773,0.885,0.213
+
 
 
