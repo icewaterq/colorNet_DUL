@@ -136,14 +136,15 @@ def make_onehot(mask, HW):
 
     return one_hot
 
-def scale_smallest(frame, a):
+def scale_smallest(frame, a, infer_wh):
     H,W = frame.shape[-2:]
     s = a / min(H, W)
+    w, h = infer_wh
     #h, w = int(s * H), int(s * W)
     #h, w = 896,1536
     #h, w = 640,1152
     #h, w = 512,896
-    h, w = 480,864
+    # h, w = 480,864
     #h, w = 448,832
     #h, w = 256,416
     return F.interpolate(frame, (h, w), mode="bilinear", align_corners=True)
@@ -187,7 +188,7 @@ def getfeature(feat,feat_type):
         return feat_merge
 
 
-def step_seg(cfg, net, labelprop, frames, mask_init):
+def step_seg(cfg, net, labelprop, frames, mask_init, args):
 
     # dense tracking: start from the 1st frame
     # keep track of new objects
@@ -198,7 +199,7 @@ def step_seg(cfg, net, labelprop, frames, mask_init):
     # scale smallest
     # if cfg.TEST.INPUT_SIZE > 0:
     #    frames = scale_smallest(frames, cfg.TEST.INPUT_SIZE)
-    frames = scale_smallest(frames, cfg.TEST.INPUT_SIZE)
+    frames = scale_smallest(frames, cfg.TEST.INPUT_SIZE, args.infer_wh)
     print(frames.size(), cfg.TEST.INPUT_SIZE)
 
 
@@ -268,7 +269,7 @@ def step_seg(cfg, net, labelprop, frames, mask_init):
         # propagate the labels and merge the result
         nxt_masks = {}
         for t0 in ref_t:
-            cxt_index = labelprop.context_index(t0, t)
+            cxt_index = labelprop.context_index(t0, t, args.custom_interval)
             cxt_embd = [ref_embd[t0][j] for j in cxt_index]
             cxt_masks = [ref_masks[t0][j] for j in cxt_index]
             nxt_masks[t0] = labelprop.predict(cxt_embd, cxt_masks, nxt_embd, cxt_index, t)
@@ -324,6 +325,11 @@ if __name__ == '__main__':
     cfg_from_file(args.cfg_file)
     if args.set_cfgs is not None:
         cfg_from_list(args.set_cfgs)
+
+    cfg.TEST.RADIUS = args.infer_R
+    print('infer R: {}'.format(cfg.TEST.RADIUS))
+    print('custom_interval: {}'.format(args.custom_interval))
+    print('infer_wh: {}'.format(args.infer_wh))
 
     # initialising the dirs
     check_dir(args.mask_output_dir, "{}_vis".format(cfg.TEST.KEY))
@@ -383,7 +389,7 @@ if __name__ == '__main__':
         assert 0 in init_masks, "initial frame has no instances"
 
         with torch.no_grad():
-            masks_pred, masks_conf = step_seg(cfg, model, labelprop, frames, init_masks)
+            masks_pred, masks_conf = step_seg(cfg, model, labelprop, frames, init_masks, args)
         frames_orig = dataset.denorm(frames_orig)
 
         pool.apply_async(writer.save, args=(frames_orig, masks_pred.cpu(), masks_conf.cpu(), masks_gt.cpu(), flags, fns, seq_name[0]))

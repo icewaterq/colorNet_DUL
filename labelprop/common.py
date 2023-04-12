@@ -48,17 +48,18 @@ class LabelPropVOS_CRW(LabelPropVOS):
         self.topk = cfg.TEST.KNN
         self.mask = None
         self.mask_hw = None
+        print('+++++++ infer radius : {}'.format(self.radius))
 
     def context_long(self, t0, t):
         return [t0]
 
-    # def context_short(self, t0, t):
-    #     to_t = t
-    #     from_t = to_t - self.cxt_size
-    #     timesteps = [max(tt, t0) for tt in range(from_t, to_t)]
-    #     return timesteps
-
     def context_short(self, t0, t):
+        to_t = t
+        from_t = to_t - self.cxt_size
+        timesteps = [max(tt, t0) for tt in range(from_t, to_t)]
+        return timesteps
+
+    def context_short_custom_interval(self, t0, t):
         # stride_lst = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 3, 3, 4, 4, 8]
         stride_lst = [1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 12, 14, 16, 18, 20, 23, 26, 30, 34, 39]
         to_t = t
@@ -69,8 +70,11 @@ class LabelPropVOS_CRW(LabelPropVOS):
         return timesteps
 
 
-    def context_index(self, t0, t):
-        index_short = self.context_short(t0, t)
+    def context_index(self, t0, t, custom_interval = False):
+        if custom_interval:
+            index_short = self.context_short_custom_interval(t0, t)
+        else:
+            index_short = self.context_short(t0, t)
         index_long = self.context_long(t0, t)
         cxt_index = index_long + index_short
         return cxt_index

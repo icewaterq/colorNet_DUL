@@ -227,6 +227,7 @@ class MaskedAttention(nn.Module):
         return self.index['%s-%s' %(H,W)]
 
     def make(self, H, W):
+        print('maks attention mask by R = {}'.format(self.radius))
         if self.flat:
             H = int(H**0.5)
             W = int(W**0.5)

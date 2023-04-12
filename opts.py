@@ -27,7 +27,11 @@ def add_global_arguments(parser):
                         metavar='N', help='dataloader threads')
     parser.add_argument('--seed', default=64, type=int, help='seed for initializing training. ')
     parser.add_argument('--is_aug', action='store_true')
-    # 
+    parser.add_argument('--custom_interval', action='store_true', help='是否使用非固定间隔采样进行预测')
+    parser.add_argument('--infer_wh', nargs='+', type=int, default=[864,480], help='预测时图片尺寸')
+    parser.add_argument('--infer_R', type=int, default=25, help='预测时特征匹配在特征图上的半径')
+
+    #
     # Inference only
     #
     parser.add_argument("--infer-list", default="voc12/val.txt", type=str)

@@ -66,7 +66,7 @@ python trainColorNetDUL_benchmark.py --exp 实验ID --train_config 配置文件�
 
 **注：只有在配置文件中is_dul为true时才能使用全局特征和融合特征。**
 ```
-python infer_vos_dul.py   --cfg configs/ytvos.yaml --exp 0001 --run final --infer-list filelists/val_davis2017_test --mask-output-dir ./output --seed 0 --set TEST.KEY 特征类型 --resume 模型路径
+python infer_vos_dul.py   --cfg configs/ytvos.yaml --infer-list filelists/val_davis2017_test --mask-output-dir ./output --seed 0 --custom_interval --infer_wh 864 480 --infer_R 25 --set TEST.KEY 特征类型 --resume 模型路径
 ```
 
 #### 评估
