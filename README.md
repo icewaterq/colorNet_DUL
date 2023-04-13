@@ -84,6 +84,6 @@ python evaluation_method.py --task semi-supervised --davis_path DAVIS数据集�
 
 | 结构 | 参数量 | FLOPs(256x256) | J&F(局部\全局\融合)      | 下载 |
 | --- | --- | --- |--------------------| --- |
-| Model-L(仅局部) | 11.5M | 12.3G | 70.9 / - / -        | [download](https://1drv.ms/u/s!AjYPLlUeVYc7nOo--DrUio6S5Pojyw?e=MNaS2i) |
-| Model-M | 14.6M | 15.2G | 70.0 / 70.6 / 72.1  | [download](https://1drv.ms/u/s!AjYPLlUeVYc7nOpAoFsZzgMQ32QAxw?e=MP5PVM) |
-| Model-S | 4.0M | 4.3G | 68.1 / 69.7 / 70.9 | [download](https://1drv.ms/u/s!AjYPLlUeVYc7nOo_3s_7J7ZmAJTeKQ?e=5nr3dq) |
+| Model-L(仅局部) | 11.5M | 12.3G | 71.1 / - / -       | [download](https://1drv.ms/f/s!AjYPLlUeVYc7nOsBdO2FdlYwPYLX2w?e=LF5gAw) |
+| Model-M | 14.6M | 15.2G | 70.4 / 70.2 / 72.5 | [download](https://1drv.ms/f/s!AjYPLlUeVYc7nOsBdO2FdlYwPYLX2w?e=LF5gAw) |
+| Model-S | 4.0M | 4.3G | 67.4 / 68.9 / 71.0 | [download](https://1drv.ms/f/s!AjYPLlUeVYc7nOsBdO2FdlYwPYLX2w?e=LF5gAw) |
