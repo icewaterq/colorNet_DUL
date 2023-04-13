@@ -64,9 +64,15 @@ python trainColorNetDUL_benchmark.py --exp 实验ID --train_config 配置文件�
 #### 预测
 特征类型分为color、cls、merge三种，color：局部特征；cls：全局特征；merge：融合特征。预测后的结果将保存在./output目录下。
 
+--custom_interval : 是否使用非固定间隔采样
+
+--infer_wh        : 预测时的图像尺寸
+
+--infer_R         : 在特征图上半径为R的邻域内计算特征相似度
+
 **注：只有在配置文件中is_dul为true时才能使用全局特征和融合特征。**
 ```
-python infer_vos_dul.py   --cfg configs/ytvos.yaml --infer-list filelists/val_davis2017_test --mask-output-dir ./output --seed 0 --custom_interval --infer_wh 864 480 --infer_R 25 --set TEST.KEY 特征类型 --resume 模型路径
+python infer_vos_dul.py --cfg configs/ytvos.yaml --infer-list filelists/val_davis2017_test --mask-output-dir ./output --seed 0 --custom_interval --infer_wh 864 480 --infer_R 25 --set TEST.KEY 特征类型 --resume 模型路径
 ```
 
 #### 评估
