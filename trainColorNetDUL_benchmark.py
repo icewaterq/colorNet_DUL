@@ -719,4 +719,30 @@ if __name__ == '__main__':
             torch.save(save_dict,
                            './snapshots/{}_{:0>3d}_{}.pkl'.format(expid,epoch,model_size))
 
+    merge_sd = {}
+    count = 0
+    for i in range(290, 300):
+        count += 1
+        model_path = './snapshots/{}_{:0>3d}_{}.pkl'.format(expid,i+1,model_size)
+        print('load model : {}'.format(model_path))
+        model_pkl = torch.load(model_path)
+        net_sd = model_pkl['model']
+        train_config = model_pkl['train_config']
+
+        for key in net_sd:
+            if 'num_batches_tracked' in key:
+                continue
+            if key not in merge_sd:
+                merge_sd[key] = net_sd[key]
+            else:
+                merge_sd[key] += net_sd[key]
+    for key in merge_sd:
+        if 'num_batches_tracked' in key:
+            continue
+        merge_sd[key] /= count
+    save_dict = {
+        'model': merge_sd,
+        'train_config': train_config
+    }
+    torch.save(save_dict, './snapshots/{}_{}_{}.pkl'.format(expid,'merge',model_size))
 
