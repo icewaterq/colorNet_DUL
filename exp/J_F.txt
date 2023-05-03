@@ -390,11 +390,9 @@ J&F-Mean,J-Mean,J-Recall,J-Decay,F-Mean,F-Recall,F-Decay
 
 
 
-
-
-
-
-
+youtube_vos_val
+User	Entries	Date of Last Entry	Overall 	J_seen 	J_unseen 	F_seen 	F_unseen
+icewater_qaq	1	04/27/23	0.726 (60)	0.706 (63)	0.676 (61)	0.735 (63)	0.788 (55)
 
 
 
